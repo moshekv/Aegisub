@@ -22,21 +22,21 @@ namespace agi {
 		typedef std::function<void()> Thunk;
 
 		class Queue {
-			virtual void DoInvoke(Thunk thunk)=0;
+			virtual void DoInvoke(Thunk&& thunk)=0;
 		public:
 			virtual ~Queue() { }
 
 			/// Invoke the thunk on this processing queue, returning immediately
-			void Async(Thunk thunk);
+			void Async(Thunk&& thunk);
 
 			/// Invoke the thunk on this processing queue, returning only when
 			/// it's complete
-			void Sync(Thunk thunk);
+			void Sync(Thunk&& thunk);
 		};
 
 		/// Initialize the dispatch thread pools
 		/// @param invoke_main A function which invokes the thunk on the GUI thread
-		void Init(std::function<void (Thunk)> invoke_main);
+		void Init(std::function<void (Thunk)>&& invoke_main);
 
 		/// Get the main queue, which runs on the GUI thread
 		Queue& Main();

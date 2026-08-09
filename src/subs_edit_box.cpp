@@ -53,6 +53,7 @@
 #include "text_selection_controller.h"
 #include "timeedit_ctrl.h"
 #include "tooltip_manager.h"
+#include "utils.h"
 #include "validators.h"
 
 #include <libaegisub/character_count.h>
@@ -104,7 +105,7 @@ const auto AssDialogue_Effect = &AssDialogue::Effect;
 }
 
 SubsEditBox::SubsEditBox(wxWindow *parent, agi::Context *context)
-: wxPanel(parent, -1, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL | wxRAISED_BORDER, "SubsEditBox")
+: wxPanel(parent, -1, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL | (OPT_GET("App/Dark Mode")->GetBool() ? wxBORDER_STATIC : wxRAISED_BORDER), "SubsEditBox")
 , c(context)
 , retina_helper(agi::make_unique<RetinaHelper>(parent))
 , undo_timer(GetEventHandler())
@@ -206,10 +207,10 @@ SubsEditBox::SubsEditBox(wxWindow *parent, agi::Context *context)
 	main_sizer->Add(middle_right_sizer, wxSizerFlags().Expand().Border(wxLEFT | wxRIGHT | wxBOTTOM, 3));
 
 	// Text editor
-	edit_ctrl = new SubsTextEditCtrl(this, wxDefaultSize, wxBORDER_SUNKEN, c);
+	edit_ctrl = new SubsTextEditCtrl(this, wxDefaultSize, (OPT_GET("App/Dark Mode")->GetBool() ? wxBORDER_SIMPLE : wxBORDER_SUNKEN), c);
 	edit_ctrl->Bind(wxEVT_CHAR_HOOK, &SubsEditBox::OnKeyDown, this);
 
-	secondary_editor = new wxTextCtrl(this, -1, "", wxDefaultPosition, wxDefaultSize, wxBORDER_SUNKEN | wxTE_MULTILINE | wxTE_READONLY);
+	secondary_editor = new wxTextCtrl(this, -1, "", wxDefaultPosition, wxDefaultSize, (OPT_GET("App/Dark Mode")->GetBool() ? wxBORDER_SIMPLE : wxBORDER_SUNKEN) | wxTE_MULTILINE | wxTE_READONLY);
 	// Here we use the height of secondary_editor as the initial size of edit_ctrl,
 	// which is more reasonable than the default given by wxWidgets.
 	// See: https://trac.wxwidgets.org/ticket/18471#ticket
@@ -448,7 +449,8 @@ void SubsEditBox::UpdateFrameTiming(agi::vfr::Framerate const& fps) {
 }
 
 void SubsEditBox::OnKeyDown(wxKeyEvent &event) {
-	hotkey::check("Subtitle Edit Box", c, event);
+	if (!osx::ime::process_key_event(edit_ctrl, event))
+		hotkey::check("Subtitle Edit Box", c, event);
 }
 
 void SubsEditBox::OnChange(wxStyledTextEvent &event) {

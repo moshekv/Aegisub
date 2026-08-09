@@ -21,8 +21,11 @@
 #include "options.h"
 #include "utils.h"
 #include <libaegisub/background_runner.h>
+#include <libaegisub/format.h>
 #include <libaegisub/fs.h>
 #include <libaegisub/path.h>
+#include <libaegisub/scoped_ptr.h>
+#include <libaegisub/util.h>
 
 #include <boost/algorithm/string/replace.hpp>
 
@@ -36,12 +39,14 @@ int OpenScriptOrVideo(const VSAPI *api, const VSSCRIPTAPI *sapi, VSScript *scrip
 	if (agi::fs::HasExtension(filename, "py") || agi::fs::HasExtension(filename, "vpy")) {
 		result = sapi->evaluateFile(script, filename.string().c_str());
 	} else {
-		VSMap *map = api->createMap();
+		agi::scoped_holder<VSMap *> map(api->createMap(), api->freeMap);
 		if (map == nullptr)
 			throw VapourSynthError("Failed to create VSMap for script info");
 
 		SetStringVar(api, map, "filename", filename.string());
-		SetStringVar(api, map, "__aegi_vscache", config::path->Decode("?local/vscache").string());
+		auto vscache = config::path->Decode("?local/vscache");
+		agi::fs::CreateDirectory(vscache);
+		SetStringVar(api, map, "__aegi_vscache", vscache.string());
 #ifdef WIN32
 		SetStringVar(api, map, "__aegi_vsplugins", config::path->Decode("?data/vapoursynth").string());
 #else
@@ -54,12 +59,10 @@ int OpenScriptOrVideo(const VSAPI *api, const VSSCRIPTAPI *sapi, VSScript *scrip
 		if (sapi->setVariables(script, map))
 			throw VapourSynthError("Failed to set script info variables");
 
-		api->freeMap(map);
-
 		std::string vscript;
 		vscript += "import sys\n";
-		vscript += "sys.path.append(f'{__aegi_data}/automation/vapoursynth')\n";
 		vscript += "sys.path.append(f'{__aegi_user}/automation/vapoursynth')\n";
+		vscript += "sys.path.append(f'{__aegi_data}/automation/vapoursynth')\n";
 		vscript += default_script;
 		result = sapi->evaluateBuffer(script, vscript.c_str(), "aegisub");
 	}
@@ -67,6 +70,30 @@ int OpenScriptOrVideo(const VSAPI *api, const VSSCRIPTAPI *sapi, VSScript *scrip
 }
 
 void VSLogToProgressSink(int msgType, const char *msg, void *userData) {
+	auto sink = reinterpret_cast<agi::ProgressSink *>(userData);
+
+	std::string msgStr(msg);
+	int commaPos = msgStr.find(',');
+	if (commaPos) {
+		std::string command = msgStr.substr(0, commaPos);
+		std::string tail = msgStr.substr(commaPos + 1, msgStr.length());
+
+		// We don't allow setting the title since that should stay as "Executing VapourSynth Script".
+		if (command == "__aegi_set_message") {
+			sink->SetMessage(tail);
+		} else if (command == "__aegi_set_progress") {
+			double percent;
+			if (!agi::util::try_parse(tail, &percent)) {
+				msgType = 2;
+				msgStr = agi::format("Warning: Invalid argument to __aegi_set_progress: %s\n", tail);
+			} else {
+				sink->SetProgress(percent, 100);
+			}
+		} else if (command == "__aegi_set_indeterminate") {
+			sink->SetIndeterminate();
+		}
+	}
+
 	int loglevel = 0;
 	std::string loglevel_str = OPT_GET("Provider/Video/VapourSynth/Log Level")->GetString();
 	if (loglevel_str == "Quiet")
@@ -85,7 +112,7 @@ void VSLogToProgressSink(int msgType, const char *msg, void *userData) {
 	if (msgType < loglevel)
 		return;
 
-	reinterpret_cast<agi::ProgressSink *>(userData)->Log(msg);
+	sink->Log(msgStr);
 }
 
 void VSCleanCache() {

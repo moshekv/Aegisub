@@ -20,6 +20,7 @@
 #include "dialog_progress.h"
 
 #include "compat.h"
+#include "options.h"
 #include "utils.h"
 
 #include <libaegisub/dispatch.h>
@@ -84,7 +85,13 @@ public:
 	}
 
 	void SetMessage(std::string const& msg) override {
-		Main().Async([=]{ dialog->text->SetLabelText(to_wx(msg)); });
+		Main().Async([=]{
+			dialog->text->SetLabelText(to_wx(msg));
+			dialog->text->Wrap(dialog->GetMinWidth());
+			dialog->text->CenterOnParent();
+			dialog->Fit();
+			dialog->Layout();
+		});
 	}
 
 	void SetProgress(int64_t cur, int64_t max) override {
@@ -121,12 +128,12 @@ public:
 };
 
 DialogProgress::DialogProgress(wxWindow *parent, wxString const& title_text, wxString const& message)
-: wxDialog(parent, -1, title_text, wxDefaultPosition, wxDefaultSize, wxBORDER_RAISED)
+: wxDialog(parent, -1, title_text, wxDefaultPosition, wxDefaultSize, (OPT_GET("App/Dark Mode")->GetBool() ? wxBORDER_SIMPLE : wxBORDER_RAISED))
 , pulse_timer(GetEventHandler())
 {
 	title = new wxStaticText(this, -1, title_text, wxDefaultPosition, wxDefaultSize, wxALIGN_CENTRE | wxST_NO_AUTORESIZE);
 	gauge = new wxGauge(this, -1, 300, wxDefaultPosition, wxSize(300,20));
-	text = new wxStaticText(this, -1, message, wxDefaultPosition, wxDefaultSize, wxALIGN_CENTRE | wxST_NO_AUTORESIZE);
+	text = new wxStaticText(this, -1, message, wxDefaultPosition, wxDefaultSize, wxALIGN_CENTRE);
 	cancel_button = new wxButton(this, wxID_CANCEL);
 	log_output = new wxTextCtrl(this, -1, "", wxDefaultPosition, wxSize(600, 240), wxTE_MULTILINE | wxTE_READONLY);
 
@@ -255,6 +262,8 @@ void DialogProgress::OnCancel(wxCommandEvent &) {
 }
 
 void DialogProgress::SetProgress(int target) {
+	pulse_timer.Stop();
+
 	if (target == progress_target) return;
 	using namespace std::chrono;
 

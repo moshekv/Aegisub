@@ -3,3 +3,4 @@ directory = wxWidgets
 url = https://github.com/wxWidgets/wxWidgets.git
 revision = v3.1.4
 clone-recursive = true
+depth = 1

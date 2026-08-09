@@ -47,6 +47,7 @@ namespace agi {
 /// functionality as possible is implemented here to avoid having four copies
 /// of each method for no good reason (and four times as many error messages)
 class VisualToolBase {
+	void SetResolutions();
 	void OnCommit(int type);
 	void OnSeek(int new_frame);
 
@@ -102,6 +103,7 @@ protected:
 	Vector2D mouse_pos; ///< Last seen mouse position
 	Vector2D drag_start; ///< Mouse position at the beginning of the last drag
 	Vector2D script_res; ///< Script resolution
+	Vector2D layout_res; ///< Layout resolution
 	Vector2D video_pos; ///< Top-left corner of the video in the display area
 	Vector2D video_res; ///< Video resolution
 	Vector2D client_size; ///< The size of the display area
@@ -133,11 +135,18 @@ protected:
 	float GetLineFontSize(AssDialogue *diag);
 	int GetLineAlignment(AssDialogue *diag);
 	/// @brief Compute text extents of the given line without any formatting
+	/// @param diag The dialogue line
+	/// @return The top left and bottom right corners of the line's bounding box respectively.
 	///
 	/// Formatting tags are stripped and \fs tags are respected, but \fscx and \fscy are kept as 100 even if
 	/// they are different in the style.
+	/// For text the top left corner of the bounding box will always be at the origin, but this needn't be
+	/// the case for drawings. The width and height of the bounding box are the shifts used for text alignment.
+	///
+	///	This function works for most common line formats, but can be inaccurate for more complex cases such as lines
+	///	containing both text and drawings.
 	/// Returns a rough estimate when getting the precise extents fails
-	void GetLineBaseExtents(AssDialogue *diag, double &width, double &height, double &descent, double &extlead);
+	std::pair<Vector2D, Vector2D> GetLineBaseExtents(AssDialogue *diag);
 	void GetLineClip(AssDialogue *diag, Vector2D &p1, Vector2D &p2, bool &inverse);
 	std::string GetLineVectorClip(AssDialogue *diag, int &scale, bool &inverse);
 

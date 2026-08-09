@@ -16,7 +16,8 @@
 		"Save Charset" : "UTF-8",
 		"Save UI State" : true,
 		"Show Toolbar" : true,
-		"Toolbar Icon Size" : 16
+		"Toolbar Icon Size" : 16,
+		"Dark Mode" : false
 	},
 
 
@@ -66,7 +67,7 @@
 		"Next Line on Commit" : true,
 		"Player" : "",
 		"Plays When Stepping Video" : false,
-		"Provider" : "ffmpegsource",
+		"Provider" : "FFmpegSource",
 		"Renderer" : {
 			"Spectrum" : {
 				"Cutoff" : 0,
@@ -351,7 +352,7 @@
 				"Aegisub Cache" : true
 			},
 			"VapourSynth" : {
-				"Default Script" : "# This default script will load an audio file using BestAudioSource.\n# It requires the `bas` plugin.\n\nimport vapoursynth as vs\nimport aegisub_vs as a\na.set_paths(globals())\n\na.ensure_plugin(\"bas\", \"BestAudioSource\", \"To use Aegisub's default audio loader, the `bas` plugin for VapourSynth must be installed\")\nvs.core.bas.Source(source=filename).set_output()"
+				"Default Script" : "# This default script will load an audio file using BestSource.\n# It requires the `bs` plugin.\n\nimport vapoursynth as vs\nimport aegisub_vs as a\na.set_paths(locals())\n\na.ensure_plugin(\"bs\", \"BestSource\", \"To use Aegisub's default audio loader, the `bs` plugin for VapourSynth must be installed\")\nvs.core.bs.AudioSource(source=filename).set_output()"
 			}
 		},
 		"Avisynth" : {
@@ -372,6 +373,7 @@
 			}
 		},
 		"VapourSynth" : {
+			"Autoload User Plugins": true,
 			"Cache" : {
 				"Files" : 500,
 				"Size" : 1000
@@ -388,11 +390,12 @@
 			"BestSource" : {
 				"Max Cache Size" : 1024,
 				"Threads" : 0,
+				"Apply RFF": true,
 				"Seek Preroll" : 12
 			},
 			"VapourSynth" : {
 				"Log Level": "Information",
-				"Default Script" : "# This default script will load a video file using LWLibavSource.\n# It requires the `lsmas` plugin.\n# See ?data/automation/vapoursynth/aegisub_vs.py for more information.\n\nimport vapoursynth as vs\nimport time\nimport aegisub_vs as a\na.set_paths(locals())\n\nclip, videoinfo = a.wrap_lwlibavsource(filename)\nclip.set_output()\n__aegi_timecodes = videoinfo[\"timecodes\"]\n__aegi_keyframes = videoinfo[\"keyframes\"]\n\n# Uncomment the first following line to read keyframes from a file when present.\n#__aegi_keyframes = a.try_get_keyframes(filename, __aegi_keyframes)\n\n# Uncomment the following line to automatically generate keyframes at scene changes. This will take some time when first loading a video.\n__aegi_keyframes = a.get_keyframes(filename, clip)\n\n# Check if the file has an audio track. This requires the `bas` plugin.\n__aegi_hasaudio = 1 if a.check_audio(filename) else 0"
+				"Default Script" : "# This default script will load a video file using LWLibavSource.\n# It requires the `lsmas` plugin.\n# See ?data/automation/vapoursynth/aegisub_vs.py for more information.\n\nimport vapoursynth as vs\nimport time\nimport aegisub_vs as a\na.set_paths(locals())\n\nclip, videoinfo = a.wrap_lwlibavsource(filename)\nclip.set_output()\n__aegi_timecodes = videoinfo[\"timecodes\"]\n__aegi_keyframes = videoinfo[\"keyframes\"]\n\n# Uncomment this line to make Aegisub look for a keyframes file for the video, or ask to detect keyframes on scene changes if no file was found.\n# You can also change the GenKeyframesMode. Valid values are NEVER, ALWAYS, and ASK.\n#__aegi_keyframes = a.get_keyframes(filename, clip, __aegi_keyframes, generate=a.GenKeyframesMode.ASK)\n\n# Check if the file has an audio track. This requires the `bs` plugin.\n__aegi_hasaudio = 1 if a.check_audio(filename) else 0"
 			}
 		}
 	},
@@ -411,6 +414,7 @@
 			"Width" : 1280
 		},
 		"Edit Box" : {
+			"Soft Line Break": false,
 			"Font Face" : "",
 			"Font Size" : 13
 		},
@@ -622,6 +626,7 @@
 				"Grid": false,
 				"Org Mode": 0
 			},
+			"Shape Handle Size": 3,
 			"Autohide": false
 		},
 		"Align to Video" : {
@@ -648,7 +653,7 @@
 			"Maximized" : false
 		},
 		"Dummy" : {
-			"FPS" : 23.975999999999999091,
+			"FPS String" : "24000/1001",
 			"Last" : {
 				"Height" : 720,
 				"Length" : 40000,
@@ -659,7 +664,7 @@
 		"Last Script Resolution Mismatch Choice" : 2,
 		"Open Audio" : true,
 		"Overscan Mask" : false,
-		"Provider" : "ffmpegsource",
+		"Provider" : "FFmpegSource",
 		"Script Resolution Mismatch" : 1,
 		"Slider" : {
 			"Fast Jump Step" : 10,

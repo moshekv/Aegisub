@@ -92,7 +92,7 @@ void General_DefaultStyles(wxTreebook *book, Preferences *parent) {
 	instructions->Wrap(400);
 	staticbox->Add(instructions, 0, wxALL, 5);
 	staticbox->AddSpacer(16);
-	
+
 	auto general = new wxFlexGridSizer(2, 5, 5);
 	general->AddGrowableCol(0, 1);
 	staticbox->Add(general, 1, wxEXPAND, 5);
@@ -211,7 +211,7 @@ void Interface(wxTreebook *book, Preferences *parent) {
 	auto edit_box = p->PageSizer(_("Edit Box"));
 	p->OptionAdd(edit_box, _("Enable call tips"), "App/Call Tips");
 	p->OptionAdd(edit_box, _("Overwrite in time boxes"), "Subtitle/Time Edit/Insert Mode");
-	p->CellSkip(edit_box);
+	p->OptionAdd(edit_box, _("Shift+Enter adds \\n"), "Subtitle/Edit Box/Soft Line Break");
 	p->OptionAdd(edit_box, _("Enable syntax highlighting"), "Subtitle/Highlight/Syntax");
 	p->OptionBrowse(edit_box, _("Dictionaries path"), "Path/Dictionary");
 	p->OptionFont(edit_box, "Subtitle/Edit Box/");
@@ -232,8 +232,16 @@ void Interface(wxTreebook *book, Preferences *parent) {
 	auto tl_assistant = p->PageSizer(_("Translation Assistant"));
 	p->OptionAdd(tl_assistant, _("Skip over whitespace"), "Tool/Translation Assistant/Skip Whitespace");
 
+	auto visual_tools = p->PageSizer(_("Visual Tools"));
+	p->OptionAdd(visual_tools, _("Shape handle size"), "Tool/Visual/Shape Handle Size");
+
 	auto color_picker = p->PageSizer(_("Colour Picker"));
 	p->OptionAdd(color_picker, _("Restrict Screen Picker to Window"), "Tool/Colour Picker/Restrict to Window");
+
+#if defined(__WXMSW__) && wxVERSION_NUMBER >= 3300
+	auto dark_mode = p->PageSizer(_("Dark Mode"));
+	p->OptionAdd(dark_mode, _("Enable experimental dark mode (restart required)"), "App/Dark Mode");
+#endif
 
 	p->SetSizerAndFit(p->sizer);
 }
@@ -459,7 +467,7 @@ void Advanced_Video(wxTreebook *book, Preferences *parent) {
 
 	wxArrayString sp_choice = to_wx(SubtitlesProviderFactory::GetClasses());
 	p->OptionChoice(expert, _("Subtitles provider"), sp_choice, "Subtitle/Provider");
-	
+
 
 #ifdef WITH_AVISYNTH
 	auto avisynth = p->PageSizer("Avisynth");
@@ -482,6 +490,7 @@ void Advanced_Video(wxTreebook *book, Preferences *parent) {
 	p->OptionAdd(bs, _("Max cache size (MB)"), "Provider/Video/BestSource/Max Cache Size");
 	p->OptionAdd(bs, _("Decoder Threads (0 to autodetect)"), "Provider/Video/BestSource/Threads");
 	p->OptionAdd(bs, _("Seek preroll (Frames)"), "Provider/Video/BestSource/Seek Preroll");
+	p->OptionAdd(bs, _("Apply RFF"), "Provider/Video/BestSource/Apply RFF");
 #endif
 
 	p->SetSizerAndFit(p->sizer);
@@ -494,26 +503,42 @@ void VapourSynth(wxTreebook *book, Preferences *parent) {
 
 	const wxString log_levels[] = { "Quiet", "Fatal", "Critical", "Warning", "Information", "Debug" };
 	wxArrayString log_levels_choice(6, log_levels);
-	p->OptionChoice(general, _("Log Level"), log_levels_choice, "Provider/Video/VapourSynth/Log Level");
+	p->OptionChoice(general, _("Log level"), log_levels_choice, "Provider/Video/VapourSynth/Log Level");
+	p->CellSkip(general);
+	p->OptionAdd(general, _("Load user plugins"), "Provider/VapourSynth/Autoload User Plugins");
 
 	auto video = p->PageSizer(_("Default Video Script"));
+
+	auto make_default_button = [=](std::string optname, wxTextCtrl *ctrl) {
+		auto showdefault = new wxButton(p, -1, _("Set to Default"));
+		showdefault->Bind(wxEVT_BUTTON, [=](auto e) {
+			ctrl->SetValue(OPT_GET(optname)->GetDefaultString());
+		});
+		return showdefault;
+	};
 
 	auto vhint = new wxStaticText(p, wxID_ANY, _("This script will be executed to load video files that aren't\nVapourSynth scripts (i.e. end in .py or .vpy).\nThe filename variable stores the path to the file."));
 	p->sizer->Fit(p);
 	vhint->Wrap(400);
 	video->Add(vhint, 0, wxALL, 5);
-	video->AddSpacer(16);
+	p->CellSkip(video);
 
-	p->OptionAddMultiline(video, "Provider/Video/VapourSynth/Default Script");
+	auto vdef = p->OptionAddMultiline(video, "Provider/Video/VapourSynth/Default Script");
+	p->CellSkip(video);
+
+	video->Add(make_default_button("Provider/Video/VapourSynth/Default Script", vdef), wxSizerFlags().Right());
 
 	auto audio = p->PageSizer(_("Default Audio Script"));
 	auto ahint = new wxStaticText(p, wxID_ANY, _("This script will be executed to load audio files that aren't\nVapourSynth scripts (i.e. end in .py or .vpy).\nThe filename variable stores the path to the file."));
 	p->sizer->Fit(p);
 	ahint->Wrap(400);
 	audio->Add(ahint, 0, wxALL, 5);
-	audio->AddSpacer(16);
+	p->CellSkip(audio);
 
-	p->OptionAddMultiline(audio, "Provider/Audio/VapourSynth/Default Script");
+	auto adef = p->OptionAddMultiline(audio, "Provider/Audio/VapourSynth/Default Script");
+	p->CellSkip(audio);
+
+	audio->Add(make_default_button("Provider/Audio/VapourSynth/Default Script", adef), wxSizerFlags().Right());
 
 	p->SetSizerAndFit(p->sizer);
 #endif

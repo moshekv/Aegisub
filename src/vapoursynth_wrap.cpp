@@ -26,16 +26,27 @@
 
 #include "options.h"
 
-#include <mutex>
-
 #ifndef _WIN32
 #include <dlfcn.h>
 #endif
 
 #ifdef _WIN32
 #define VSSCRIPT_SO "vsscript.dll"
+
+#ifdef _WIN64
+#define VS_INSTALL_REGKEY L"Software\\VapourSynth"
+#else
+#define VS_INSTALL_REGKEY L"Software\\VapourSynth-32"
+#endif
+
+#else
+#ifdef __APPLE__
+#define VSSCRIPT_SO "libvapoursynth-script.dylib"
+#define DLOPEN_FLAGS RTLD_LAZY | RTLD_GLOBAL
 #else
 #define VSSCRIPT_SO "libvapoursynth-script.so"
+#define DLOPEN_FLAGS RTLD_LAZY | RTLD_GLOBAL | RTLD_DEEPBIND
+#endif
 #endif
 
 // Allocate storage for and initialise static members
@@ -57,17 +68,45 @@ VapourSynthWrapper::VapourSynthWrapper() {
 	// VSScript assumes it's only loaded once, so unlike AVS we can't unload it when the refcount reaches zero
 	if (!vs_loaded) {
 #ifdef _WIN32
+
+		std::wstring vsscriptDLLpath = L"";
+
+		HKEY hKey;
+		LONG lRes = RegOpenKeyEx(HKEY_CURRENT_USER, VS_INSTALL_REGKEY, 0, KEY_READ, &hKey);
+
+		if (lRes != ERROR_SUCCESS) {
+			lRes = RegOpenKeyEx(HKEY_LOCAL_MACHINE, VS_INSTALL_REGKEY, 0, KEY_READ, &hKey);
+		}
+
+		if (lRes == ERROR_SUCCESS) {
+			WCHAR szBuffer[512];
+			DWORD dwBufferSize = sizeof(szBuffer);
+			ULONG nError;
+
+			nError = RegQueryValueEx(hKey, L"VSScriptDLL", 0, nullptr, (LPBYTE)szBuffer, &dwBufferSize);
+			RegCloseKey(hKey);
+
+			if (nError == ERROR_SUCCESS)
+				vsscriptDLLpath = szBuffer;
+		}
+
+		if (vsscriptDLLpath.length()) {
+			hLib = LoadLibraryW(vsscriptDLLpath.c_str());
+		}
+
+		if (!hLib) {
 #define CONCATENATE(x, y) x ## y
 #define _Lstr(x) CONCATENATE(L, x)
-		hLib = LoadLibraryW(_Lstr(VSSCRIPT_SO));
+			hLib = LoadLibraryW(_Lstr(VSSCRIPT_SO));
 #undef _Lstr
 #undef CONCATENATE
+		}
 #else
-		hLib = dlopen(VSSCRIPT_SO, RTLD_LAZY | RTLD_GLOBAL | RTLD_DEEPBIND);
+		hLib = dlopen(VSSCRIPT_SO, DLOPEN_FLAGS);
 #endif
 
 		if (!hLib)
-			throw VapourSynthError("Could not load " VSSCRIPT_SO);
+			throw VapourSynthError("Could not load " VSSCRIPT_SO ". Make sure VapourSynth is installed correctly.");
 
 #ifdef _WIN32
 		FUNC* getVSScriptAPI = (FUNC*)GetProcAddress(hLib, "getVSScriptAPI");
@@ -85,7 +124,7 @@ VapourSynthWrapper::VapourSynthWrapper() {
 		setlocale(LC_ALL, oldlocale.c_str());
 
 		if (!scriptapi)
-			throw VapourSynthError("Failed to get VapourSynth ScriptAPI");
+			throw VapourSynthError("Failed to get VapourSynth ScriptAPI. Make sure VapourSynth is installed correctly.");
 
 		api = scriptapi->getVSAPI(VAPOURSYNTH_API_VERSION);
 

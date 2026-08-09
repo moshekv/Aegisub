@@ -382,10 +382,14 @@ public:
 	void DropFromScreenXY(int x, int y);
 };
 
+#ifndef MAC_OS_VERSION_15_0
+#define MAC_OS_VERSION_15_0 150000
+#endif
+
 void ColorPickerScreenDropper::DropFromScreenXY(int x, int y) {
 	wxMemoryDC capdc(capture);
 	capdc.SetPen(*wxTRANSPARENT_PEN);
-#ifndef __WXMAC__
+#if !(defined(__WXMAC__) && (MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_VERSION_15_0))
 	std::unique_ptr<wxDC> screen;
 
 	if (!OPT_GET("Tool/Colour Picker/Restrict to Window")->GetBool()) {
@@ -410,8 +414,8 @@ void ColorPickerScreenDropper::DropFromScreenXY(int x, int y) {
 	CGGetDisplaysWithPoint(CGPointMake(x, y), 1, &display_id, &display_count);
 
 	agi::scoped_holder<CGImageRef> img(CGDisplayCreateImageForRect(display_id, CGRectMake(x - resx / 2, y - resy / 2, resx, resy)), CGImageRelease);
-	NSUInteger width = CGImageGetWidth(img);
-	NSUInteger height = CGImageGetHeight(img);
+	size_t width = CGImageGetWidth(img);
+	size_t height = CGImageGetHeight(img);
 	std::vector<uint8_t> imgdata(height * width * 4);
 
 	agi::scoped_holder<CGColorSpaceRef> colorspace(CGColorSpaceCreateDeviceRGB(), CGColorSpaceRelease);
@@ -596,7 +600,7 @@ DialogColorPicker::DialogColorPicker(wxWindow *parent, agi::Color initial_color,
 
 	eyedropper_bitmap = GETIMAGE(eyedropper_tool_24);
 	eyedropper_bitmap.SetMask(new wxMask(eyedropper_bitmap, wxColour(255, 0, 255)));
-	screen_dropper_icon = new wxStaticBitmap(this, -1, eyedropper_bitmap, wxDefaultPosition, wxDefaultSize, wxRAISED_BORDER);
+	screen_dropper_icon = new wxStaticBitmap(this, -1, eyedropper_bitmap, wxDefaultPosition, wxDefaultSize, (OPT_GET("App/Dark Mode")->GetBool() ? wxBORDER_SIMPLE : wxRAISED_BORDER));
 	screen_dropper = new ColorPickerScreenDropper(this, 7, 7, 8);
 
 	// Arrange the controls in a nice way

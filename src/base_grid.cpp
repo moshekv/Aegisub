@@ -56,13 +56,14 @@
 #include <wx/scrolbar.h>
 #include <wx/sizer.h>
 
+// Check menu.h for id range allocation before editing this enum
 enum {
 	GRID_SCROLLBAR = 1730,
-	MENU_SHOW_COL = 1250 // Needs 15 IDs after this
+	MENU_SHOW_COL = (wxID_HIGHEST + 1) + 2000 // Needs 15 IDs after this
 };
 
 BaseGrid::BaseGrid(wxWindow* parent, agi::Context *context)
-: wxWindow(parent, -1, wxDefaultPosition, wxDefaultSize, wxWANTS_CHARS | wxSUNKEN_BORDER)
+: wxWindow(parent, -1, wxDefaultPosition, wxDefaultSize, wxWANTS_CHARS | (OPT_GET("App/Dark Mode")->GetBool() ? wxBORDER_SIMPLE : wxSUNKEN_BORDER))
 , scrollBar(new wxScrollBar(this, GRID_SCROLLBAR, wxDefaultPosition, wxDefaultSize, wxSB_VERTICAL))
 , context(context)
 , columns(GetGridColumns())
@@ -133,14 +134,10 @@ void BaseGrid::OnSubtitlesCommit(int type) {
 	if (type == AssFile::COMMIT_NEW || type & AssFile::COMMIT_ORDER || type & AssFile::COMMIT_DIAG_ADDREM || type & AssFile::COMMIT_FOLD)
 		UpdateMaps();
 
-	if (type & AssFile::COMMIT_DIAG_META) {
+	if (type & AssFile::COMMIT_DIAG_META || type & AssFile::COMMIT_DIAG_TIME) {
 		SetColumnWidths();
 		Refresh(false);
-		return;
-	}
-	if (type & AssFile::COMMIT_DIAG_TIME)
-		Refresh(false);
-	else if (type & AssFile::COMMIT_DIAG_TEXT) {
+	} else if (type & AssFile::COMMIT_DIAG_TEXT) {
 		for (auto const& rect : text_refresh_rects)
 			RefreshRect(rect, false);
 	}
@@ -579,7 +576,7 @@ void BaseGrid::OnMouseEvent(wxMouseEvent &event) {
 void BaseGrid::OnContextMenu(wxContextMenuEvent &evt) {
 	wxPoint pos = evt.GetPosition();
 	if (pos == wxDefaultPosition || ScreenToClient(pos).y > lineHeight) {
-		if (!context_menu) context_menu = menu::GetMenu("grid_context", context);
+		if (!context_menu) context_menu = menu::GetMenu("grid_context", (wxID_HIGHEST + 1) + 8000, context);
 		menu::OpenPopupMenu(context_menu.get(), this);
 	}
 	else {

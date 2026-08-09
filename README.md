@@ -1,5 +1,7 @@
 ## arch1t3cht's Aegisub "fork"
-Go [here](#branchfeature-list) for the new features.
+Download release builds [here](https://github.com/arch1t3cht/Aegisub/releases), or the latest CI builds [here](https://github.com/arch1t3cht/Aegisub/actions?query=branch%3Afeature+event%3Apush).
+
+The release page also has detailed list of all changes and new features. If you're interested in the technical details or want to compile yourself, read on.
 
 ### Don't we have enough Aegisub forks already??
 We absolutely do, and I'm aware that adding another one [doesn't sound like](https://xkcd.com/927/) a [good idea on paper](https://cdn.discordapp.com/attachments/425357202963038208/1007103606421459004/unknown.png). However,
@@ -12,6 +14,17 @@ We absolutely do, and I'm aware that adding another one [doesn't sound like](htt
 - ~~I try to convince myself that this isn't really a "fork" in the traditional sense - one which aims to provide extended support and stability fixes. It's a collection of new feature additions which I built myself, together with some of the most important new features floating around other forks.~~ At this point it's probably too late to still be saying this. Still, the general mission hasn't changed. This fork collects new features and critical bugfixes, but won't be putting extra time into maintenance aspects like cleanup and refactors. Partly, this is also because any big refactors would make it harder to pull these changes into upstream repositories or future forks.
 
     While this is usually also the version of Aegisub I'm currently using, I make no promises on stability. **Don't** use this version if you're just looking for any version of Aegisub - this is mostly intended for typesetting and other advanced usage.
+
+### Issues and Pull Requests
+Please be aware that, even if this fork is currently effectively the "active Aegisub fork", I cannot promise full maintainership.
+The main purpose of this fork is collecting fixes and additions that I am sure are correct (with the goal of complicating the eventual merging of changes and additions upstream as little as possible).
+In particular, unsolicited pull requests with large additions are unlikely to get merged here. If you plan to send a large PR, feel free to contact me first to see if I'd be willing to merge it and/or have suggestions on how to implement it.
+Similarly, I cannot currently accept PRs that update or add translations to languages that I do not speak myself.
+I'm very sorry to have to limit contributions in this way, but I simply do not have the time and resources right now to act as a full maintainer.
+
+As for issues and feature requests, I'll gladly take any bug reports, but if you encounter an issue, please check first if it occurs only on my fork, or also on official Aegisub or [earlier TSTools builds](https://github.com/TypesettingTools/Aegisub/actions).
+If it wasn't introduced by my fork, I can still take a look, but I can't promise anything.
+Also, in that case, please open the issues at the relevant upstream repositories rather than here. This makes it easier to find issues with *my* additions (which have much higher priority), and keeps the issues around when my fork eventually becomes less relevant.
 
 ### Organization
 Being a collection of different feature additions, this repository consists of a set of branches for different features, so that they can easily be merged into other repositories. The [`feature`](https://github.com/arch1t3cht/Aegisub/tree/feature) branch merges together all the features I deem as currently usable. Due to the structure of the repository, I will be force-pushing to this branch and some of the individual branches very frequently, so they're not ideal for basing further branches on.
@@ -39,35 +52,14 @@ This list is for navigating the repository. Go to the [release page](https://git
 - [`spectrum-frequency-mapping`](https://github.com/arch1t3cht/Aegisub/tree/spectrum-frequency-mapping): Merge EleonoreMizo's [spectrum display improvements](https://github.com/TypesettingTools/Aegisub/pull/94), and also make Shift+Scroll vertically zoom the audio display
 - [`wangqr_time_video`](https://github.com/arch1t3cht/Aegisub/tree/wangqr_time_video): Merge wangqr's feature adding a tool for timing subtitles to changes in the video
 
-### Troubleshooting
-I'll gladly take any bug reports, but if you encounter an issue, please check first if it occurs only on my fork, or also on [earlier TSTools builds](https://github.com/TypesettingTools/Aegisub/actions).
-If it wasn't introduced by my fork, I can still take a look, but I can't promise anything.
-
-You can find me for support on various servers, including the cave and the TSTools server linked below.
-
-#### Aegisub on Linux doesn't recognize my GTK theme
-This is probably because you're building with wxgtk2. Building with wxgtk3 fixes this, but causes some problems of its own (notably the broken color picker, occasional crashes when opening file dialogs from automation scripts, and general layouting issues).
-
-The exact way of switching depends on your Linux distribution, but essentially you need to ensure that `wx-config` or the next best variant of it points to wxgtk3. If it points to wxgtk2 by default and deinstalling wxgtk2 isn't an option, you can also temporarily move it out of the path or use a `native-file` in your meson project. Then, fully reconfigure meson using `meson configure --clearcache` and `meson setup --reconfigure`.
-
-#### I get errors like "Option not found" after merging one of these branches
-The changes to `default_config.json` or similar files weren't detected by meson due to missing regen dependencies. You can either merge the `bugfixes` branch or rebuild from scratch.
-
-#### The video is desynced / Frames don't appear at the right time
-This is probably due to the ffms2 seeking bug ([#394](https://github.com/FFMS/ffms2/issues/394)). On Windows, this specific regression shouldn't happen anymore. On Linux, you need to install the latest git version of ffms2 - for example the [`ffms2-git`](https://aur.archlinux.org/packages/ffms2-git) AUR package on Arch linux, or just compile it yourself.
-
-If it's not because of this particular bug, you can also try an alternative video source like LSMASHSource via Avisynth or Vapoursynth, or BestSource.
-
-#### On Windows: Aegisub crashes whenever I open a video
-If you're compiling yourself, try adding `--force-fallback-for=zlib` to the meson options.
-
-
 ### Compilation
+If you're just looking to install Aegisub, you might want to check out the [releases page](https://github.com/arch1t3cht/Aegisub/releases) or the [CI builds](https://github.com/arch1t3cht/Aegisub/actions) first.
+
 For compilation on Windows, see the TSTools documentation below. Also check the [GitHub workflow](https://github.com/arch1t3cht/Aegisub/blob/cibuilds/.github/workflows/ci.yml) for the project arguments.
 
 On Arch Linux, there is an AUR package called [aegisub-arch1t3cht-git](https://aur.archlinux.org/packages/aegisub-arch1t3cht-git). It's not maintained by me but seems to work.
 
-On other distributions or for manual compilation you can use this package or the [TSTools PKGBUILD](https://aur.archlinux.org/packages/aegisub-ttools-meson-git) as a reference, in particular for installing the necessary dependencies if you don't want to compile them yourself.
+On other Linux distributions or for manual compilation you can use this package or the [TSTools PKGBUILD](https://aur.archlinux.org/packages/aegisub-ttools-meson-git) as a reference, in particular for installing the necessary dependencies if you don't want to compile them yourself.
 If all dependencies are installed:
 - Install Meson
 - Clone the repository
@@ -89,14 +81,14 @@ To change the options of an existing build directory, run `meson setup --reconfi
 
 ### Dependencies
 Apart from the dependencies for the TSTools version, there are some additional dependencies. These are cloned and compiled from scratch if not found, but you might want to install binaries instead:
-- `jansson`: For BestSource
+- `xxhash`: For BestSource
 - `ffmpeg`: Becomes a direct dependency when compiling with BestSource
-- `avisynth` (or `avisynthplus`): Optional run-time dependency for the Avisynth source
-- `vapoursynth`: Optional run-time dependency for the VapourSynth source
+- `avisynth` (or `avisynthplus`): Optional run-time dependency for the Avisynth audio/video provider
+- `vapoursynth`: Optional run-time dependency for the VapourSynth audio/video provider
 
    The following VapourSynth plugins are used by the default scripts set in the default configuration:
-   - [`lsmas`](https://github.com/AkarinVS/L-SMASH-Works): For LWLibavSource
-   - [`bas`](https://github.com/vapoursynth/bestaudiosource): For BestAudioSource
+   - [`lsmas`](https://github.com/HomeOfAviSynthPlusEvolution/L-SMASH-Works): For LWLibavSource
+   - [`bs`](https://github.com/vapoursynth/bestsource): For BestSource, used for audio
    - [`wwxd`](https://github.com/dubhater/vapoursynth-wwxd) and [`scxvid`](https://github.com/dubhater/vapoursynth-scxvid) (depending on settings): For keyframe generation
 
 
@@ -132,7 +124,7 @@ All other dependencies are either stored in the repository or are included as su
 
 Building:
 
-1. Clone Aegisub's repository: `git clone https://github.com/TypesettingTools/Aegisub.git`
+1. Clone Aegisub's repository: `git clone https://github.com/arch1t3cht/Aegisub.git`
 2. From the Visual Studio "x64 Native Tools Command Prompt", generate the build directory: `meson build -Ddefault_library=static` (if building for release, add `--buildtype=release`)
 3. Build with `cd build` and `ninja`
 

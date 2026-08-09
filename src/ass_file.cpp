@@ -21,7 +21,10 @@
 #include "ass_info.h"
 #include "ass_style.h"
 #include "ass_style_storage.h"
+#include "async_video_provider.h"
 #include "options.h"
+#include "project.h"
+#include "include/aegisub/context.h"
 
 #include <algorithm>
 #include <boost/algorithm/string/case_conv.hpp>
@@ -153,6 +156,23 @@ void AssFile::GetResolution(int &sw, int &sh) const {
 		sh = sw == 1280 ? 1024 : sw * 3 / 4;
 }
 
+void AssFile::GetLayoutResolution(int &lw, int &lh) const {
+	lw = GetScriptInfoAsInt("LayoutResX");
+	lh = GetScriptInfoAsInt("LayoutResY");
+}
+
+void AssFile::GetEffectiveLayoutResolution(agi::Context *c, int &lw, int &lh) const {
+	GetLayoutResolution(lw, lh);
+	if (lw == 0 || lh == 0) {
+		if (c->project->VideoProvider()) {
+			lw = c->project->VideoProvider()->GetWidth();
+			lh = c->project->VideoProvider()->GetHeight();
+		} else {
+			GetResolution(lw, lh);
+		}
+	}
+}
+
 std::vector<std::string> AssFile::GetStyles() const {
 	std::vector<std::string> styles;
 	for (auto& style : Styles)
@@ -242,7 +262,7 @@ uint32_t AssFile::AddExtradata(std::string const& key, std::string const& value)
 			return data.id;
 		}
 	}
-	Extradata.push_back(ExtradataEntry{next_extradata_id, key, value});
+	Extradata.push_back(ExtradataEntry{next_extradata_id, 0, key, value});
 	return next_extradata_id++; // return old value, then post-increment
 }
 
@@ -340,10 +360,16 @@ void AssFile::CleanExtradata() {
 		}
 	}
 
+	for (ExtradataEntry &e : Extradata) {
+		if (ids_used.count(e.id))
+			e.expiration_counter = 0;
+		else
+			e.expiration_counter++;
+	}
 	if (ids_used.size() != Extradata.size()) {
 		// Erase all no-longer-used extradata entries
 		Extradata.erase(std::remove_if(begin(Extradata), end(Extradata), [&](ExtradataEntry const& e) {
-			return !ids_used.count(e.id);
+			return e.expiration_counter >= 10;
 		}), end(Extradata));
 	}
 }

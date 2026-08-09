@@ -212,7 +212,7 @@ DialogStyleEditor::DialogStyleEditor(wxWindow *parent, AssStyle *style, agi::Con
 	auto ScaleX = num_text_ctrl(&work->scalex, 0.0, 10000.0, 1, 2);
 	auto ScaleY = num_text_ctrl(&work->scaley, 0.0, 10000.0, 1, 2);
 	auto Angle = num_text_ctrl(&work->angle, -360.0, 360.0, 1.0, 2);
-	auto Spacing = num_text_ctrl(&work->spacing, -1000.0, 1000.0, 0.1, 3);
+	auto Spacing = num_text_ctrl(&work->spacing, 0.0, 1000.0, 0.1, 3);
 	Encoding = new wxComboBox(this, -1, "", wxDefaultPosition, wxDefaultSize, encodingStrings, wxCB_READONLY);
 
 	// Set control tooltips
@@ -258,7 +258,7 @@ DialogStyleEditor::DialogStyleEditor(wxWindow *parent, AssStyle *style, agi::Con
 			break;
 		}
 	}
-	if (!found) Encoding->Select(0);
+	if (!found) Encoding->Select(2);
 
 	// Style name sizer
 	NameSizer->Add(StyleName, 1, wxALL, 0);
@@ -327,7 +327,7 @@ DialogStyleEditor::DialogStyleEditor(wxWindow *parent, AssStyle *style, agi::Con
 	// Preview
 	auto previewButton = new ColourButton(this, wxSize(45, 16), false, OPT_GET("Colour/Style Editor/Background/Preview")->GetColor());
 	PreviewText = new wxTextCtrl(this, -1, to_wx(OPT_GET("Tool/Style Editor/Preview Text")->GetString()));
-	SubsPreview = new SubtitlesPreview(this, wxSize(100, 60), wxSUNKEN_BORDER, OPT_GET("Colour/Style Editor/Background/Preview")->GetColor());
+	SubsPreview = new SubtitlesPreview(this, wxSize(100, 60), (OPT_GET("App/Dark Mode")->GetBool() ? wxBORDER_SIMPLE : wxSUNKEN_BORDER), OPT_GET("Colour/Style Editor/Background/Preview")->GetColor());
 
 	SubsPreview->SetToolTip(_("Preview of current style"));
 	SubsPreview->SetStyle(*style);
@@ -474,8 +474,10 @@ void DialogStyleEditor::UpdateWorkStyle() {
 
 	work->font = from_wx(FontName->GetValue());
 
+	wxString encoding_selection = Encoding->GetValue();
+	wxString encoding_num = encoding_selection.substr(0, 1) + encoding_selection.substr(1).BeforeFirst('-');	// Have to account for -1
 	long templ = 0;
-	Encoding->GetValue().BeforeFirst('-').ToLong(&templ);
+	encoding_num.ToLong(&templ);
 	work->encoding = templ;
 
 	work->borderstyle = OutlineType->IsChecked() ? 3 : 1;

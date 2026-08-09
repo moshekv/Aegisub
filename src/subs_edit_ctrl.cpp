@@ -56,13 +56,25 @@
 #include <wx/menu.h>
 #include <wx/settings.h>
 
+// Define macros for wxWidgets 3.1
+#ifndef wxSTC_KEYMOD_CTRL
+#define wxSTC_KEYMOD_CTRL wxSTC_SCMOD_CTRL
+#endif
+#ifndef wxSTC_KEYMOD_SHIFT
+#define wxSTC_KEYMOD_SHIFT wxSTC_SCMOD_SHIFT
+#endif
+#ifndef wxSTC_KEYMOD_NORM
+#define wxSTC_KEYMOD_NORM wxSTC_SCMOD_NORM
+#endif
+
 // Maximum number of languages (locales)
 // It should be above 100 (at least 242) and probably not more than 1000
 #define LANGS_MAX 1000
 
 /// Event ids
+// Check menu.h for id range allocation before editing this enum
 enum {
-	EDIT_MENU_SPLIT_PRESERVE = 1400,
+	EDIT_MENU_SPLIT_PRESERVE = (wxID_HIGHEST + 1) + 4000,
 	EDIT_MENU_SPLIT_ESTIMATE,
 	EDIT_MENU_SPLIT_VIDEO,
 	EDIT_MENU_CUT,
@@ -73,9 +85,9 @@ enum {
 	EDIT_MENU_REMOVE_FROM_DICT,
 	EDIT_MENU_SUGGESTION,
 	EDIT_MENU_SUGGESTIONS,
-	EDIT_MENU_THESAURUS = 1450,
+	EDIT_MENU_THESAURUS = (wxID_HIGHEST + 1) + 5000,
 	EDIT_MENU_THESAURUS_SUGS,
-	EDIT_MENU_DIC_LANGUAGE = 1600,
+	EDIT_MENU_DIC_LANGUAGE = (wxID_HIGHEST + 1) + 6000,
 	EDIT_MENU_DIC_LANGS,
 	EDIT_MENU_THES_LANGUAGE = EDIT_MENU_DIC_LANGUAGE + LANGS_MAX,
 	EDIT_MENU_THES_LANGS
@@ -87,6 +99,8 @@ SubsTextEditCtrl::SubsTextEditCtrl(wxWindow* parent, wxSize wsize, long style, a
 , thesaurus(agi::make_unique<Thesaurus>())
 , context(context)
 {
+	osx::ime::inject(this);
+
 	// Set properties
 	SetWrapMode(wxSTC_WRAP_WORD);
 	SetMarginWidth(1,0);
@@ -94,17 +108,17 @@ SubsTextEditCtrl::SubsTextEditCtrl(wxWindow* parent, wxSize wsize, long style, a
 	SetStyles();
 
 	// Set hotkeys
-	CmdKeyClear(wxSTC_KEY_RETURN,wxSTC_SCMOD_CTRL);
-	CmdKeyClear(wxSTC_KEY_RETURN,wxSTC_SCMOD_SHIFT);
-	CmdKeyClear(wxSTC_KEY_RETURN,wxSTC_SCMOD_NORM);
-	CmdKeyClear(wxSTC_KEY_TAB,wxSTC_SCMOD_NORM);
-	CmdKeyClear(wxSTC_KEY_TAB,wxSTC_SCMOD_SHIFT);
-	CmdKeyClear('D',wxSTC_SCMOD_CTRL);
-	CmdKeyClear('L',wxSTC_SCMOD_CTRL);
-	CmdKeyClear('L',wxSTC_SCMOD_CTRL | wxSTC_SCMOD_SHIFT);
-	CmdKeyClear('T',wxSTC_SCMOD_CTRL);
-	CmdKeyClear('T',wxSTC_SCMOD_CTRL | wxSTC_SCMOD_SHIFT);
-	CmdKeyClear('U',wxSTC_SCMOD_CTRL);
+	CmdKeyClear(wxSTC_KEY_RETURN,wxSTC_KEYMOD_CTRL);
+	CmdKeyClear(wxSTC_KEY_RETURN,wxSTC_KEYMOD_SHIFT);
+	CmdKeyClear(wxSTC_KEY_RETURN,wxSTC_KEYMOD_NORM);
+	CmdKeyClear(wxSTC_KEY_TAB,wxSTC_KEYMOD_NORM);
+	CmdKeyClear(wxSTC_KEY_TAB,wxSTC_KEYMOD_SHIFT);
+	CmdKeyClear('D',wxSTC_KEYMOD_CTRL);
+	CmdKeyClear('L',wxSTC_KEYMOD_CTRL);
+	CmdKeyClear('L',wxSTC_KEYMOD_CTRL | wxSTC_KEYMOD_SHIFT);
+	CmdKeyClear('T',wxSTC_KEYMOD_CTRL);
+	CmdKeyClear('T',wxSTC_KEYMOD_CTRL | wxSTC_KEYMOD_SHIFT);
+	CmdKeyClear('U',wxSTC_KEYMOD_CTRL);
 
 	using std::bind;
 
@@ -192,6 +206,7 @@ void SubsTextEditCtrl::OnLoseFocus(wxFocusEvent &event) {
 }
 
 void SubsTextEditCtrl::OnKeyDown(wxKeyEvent &event) {
+	if (osx::ime::process_key_event(this, event)) return;
 	event.Skip();
 
 	// Workaround for wxSTC eating tabs.
@@ -201,7 +216,7 @@ void SubsTextEditCtrl::OnKeyDown(wxKeyEvent &event) {
 		auto sel_start = GetSelectionStart(), sel_end = GetSelectionEnd();
 		wxCharBuffer old = GetTextRaw();
 		std::string data(old.data(), sel_start);
-		data.append("\\N");
+		data.append(OPT_GET("Subtitle/Edit Box/Soft Line Break")->GetBool() ? "\\n" : "\\N");
 		data.append(old.data() + sel_end, old.length() - sel_end);
 		SetTextRaw(data.c_str());
 
@@ -255,6 +270,10 @@ void SubsTextEditCtrl::SetStyles() {
 	// Misspelling indicator
 	IndicatorSetStyle(0,wxSTC_INDIC_SQUIGGLE);
 	IndicatorSetForeground(0,wxColour(255,0,0));
+
+	// IME pending text indicator
+	IndicatorSetStyle(1, wxSTC_INDIC_PLAIN);
+	IndicatorSetUnder(1, true);
 }
 
 void SubsTextEditCtrl::UpdateStyle() {
@@ -319,6 +338,7 @@ void SubsTextEditCtrl::UpdateCallTip() {
 }
 
 void SubsTextEditCtrl::SetTextTo(std::string const& text) {
+	osx::ime::invalidate(this);
 	SetEvtHandlerEnabled(false);
 	Freeze();
 

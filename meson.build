@@ -1,13 +1,14 @@
 project('Aegisub', ['c', 'cpp'],
         license: 'BSD-3-Clause',
-        meson_version: '>=0.57.0',
-        default_options: ['cpp_std=c++14', 'buildtype=debugoptimized'],
+        meson_version: '>=1.0.0',
+        default_options: ['cpp_std=c++17', 'buildtype=debugoptimized'],
         version: '3.2.2')
 
 cmake = import('cmake')
 
 if host_machine.system() == 'windows'
     add_project_arguments('-DNOMINMAX', language: 'cpp')
+    add_project_arguments('-DUNICODE', language: 'cpp')
 
     if not get_option('csri').disabled()
         add_global_arguments('-DCSRI_NO_EXPORT', language: 'c')
@@ -57,10 +58,14 @@ if get_option('buildtype') == 'release'
 endif
 
 conf = configuration_data()
+conf.set_quoted('P_BIN', bindir)
 conf.set_quoted('P_DATA', dataroot)
 conf.set_quoted('P_LOCALE', localedir)
 if get_option('credit') != ''
     conf.set_quoted('BUILD_CREDIT', get_option('credit'))
+endif
+if get_option('build_appimage')
+    conf.set('APPIMAGE_BUILD', 1)
 endif
 conf.set('WITH_UPDATE_CHECKER', get_option('enable_update_checker'))
 
@@ -98,7 +103,7 @@ deps += dependency('libass', version: '>=0.9.7',
 
 boost_modules = ['chrono', 'filesystem', 'thread', 'locale', 'regex']
 if not get_option('local_boost')
-    boost_dep = dependency('boost', version: '>=1.50.0',
+    boost_dep = dependency('boost', version: '>=1.70.0',
                             modules: boost_modules + ['system'],
                             required: false,
                             static: get_option('default_library') == 'static')
@@ -140,24 +145,36 @@ else
     endif
 
     opt_var = cmake.subproject_options()
+    opt_var.set_override_option('cpp_std', 'c++14')
     opt_var.add_cmake_defines({
         'wxBUILD_INSTALL': false,
-        'wxBUILD_PRECOMP': false,       # otherwise breaks project generation w/ meson
+        'wxBUILD_PRECOMP': 'OFF',       # otherwise breaks project generation w/ meson
         'wxBUILD_SHARED': build_shared,
 
         'wxUSE_WEBVIEW': false,         # breaks build on linux
+        'wxUSE_REGEX': 'builtin',
         'CMAKE_BUILD_TYPE': build_type,
         'wxUSE_IMAGE': true,
         'wxBUILD_MONOLITHIC': true      # otherwise breaks project generation w/ meson
     })
 
-    wx = cmake.subproject('wxWidgets', options: opt_var)
+    if get_option('wx_version').version_compare('>=3.3.0')
+        wx = cmake.subproject('wxWidgets-master', options: opt_var)
+    else
+        wx = cmake.subproject('wxWidgets', options: opt_var)
+    endif
 
     deps += [
         wx.dependency('wxmono'),
         wx.dependency('wxregex'),
         wx.dependency('wxscintilla')
     ]
+
+    if get_option('wx_version').version_compare('>=3.3.0')
+        deps += [
+            wx.dependency('wxlexilla')
+        ]
+    endif
 
     if host_machine.system() == 'windows' or host_machine.system() == 'darwin'
         deps += [
@@ -232,8 +249,9 @@ needs_ffmpeg = false
 
 if get_option('bestsource').enabled()
     conf.set('WITH_BESTSOURCE', 1)
-    bs = subproject('bestsource')
-    deps += bs.get_variable('bestsource_dep')
+    deps += dependency('bestsource', version: '>=6.0',
+                       fallback: ['bestsource', 'bestsource_dep'],
+                       default_options: ['enable_plugin=false'])
     dep_avail += 'BestSource'
     needs_ffmpeg = true
 endif
@@ -311,8 +329,12 @@ if host_machine.system() == 'windows'
     endif
 endif
 
+if host_machine.system() == 'windows' and cc.has_header('dwrite_3.h')
+    conf.set('HAVE_DWRITE_3', 1)
+endif
+
 if host_machine.system() == 'darwin'
-    frameworks_dep = dependency('appleframeworks', modules : ['CoreText', 'CoreFoundation', 'AppKit', 'Carbon', 'IOKit'])
+    frameworks_dep = dependency('appleframeworks', modules : ['CoreText', 'CoreFoundation', 'AppKit', 'Carbon', 'IOKit', 'QuartzCore'])
     deps += frameworks_dep
 endif
 
@@ -402,7 +424,10 @@ subdir('libaegisub')
 subdir('packages')
 subdir('po')
 subdir('src')
-subdir('tests')
+
+if not meson.is_cross_build()
+    subdir('tests')
+endif
 
 aegisub_cpp_pch = ['src/include/agi_pre.h']
 aegisub_c_pch = ['src/include/agi_pre_c.h']
@@ -415,7 +440,7 @@ if host_machine.system() == 'windows'
     link_depends += manifest_file
 endif
 
-aegisub = executable('aegisub', aegisub_src, version_h, acconf,
+aegisub = executable('aegisub', aegisub_src, version_h, acconf, resrc,
                      link_with: [libresrc, libluabins, libaegisub],
                      link_args: link_args,
                      link_depends: link_depends,

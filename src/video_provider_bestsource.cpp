@@ -22,9 +22,9 @@
 #ifdef WITH_BESTSOURCE
 #include "include/aegisub/video_provider.h"
 
+#include "bestsource_common.h"
+
 #include "videosource.h"
-#include "audiosource.h"
-#include "BSRational.h"
 
 extern "C" {
 #include <libavutil/frame.h>
@@ -32,7 +32,6 @@ extern "C" {
 #include <libswscale/swscale.h>
 }
 
-#include "bestsource_common.h"
 #include "options.h"
 #include "compat.h"
 #include "video_frame.h"
@@ -40,9 +39,12 @@ namespace agi { class BackgroundRunner; }
 
 #include <libaegisub/fs.h>
 #include <libaegisub/path.h>
+#include <libaegisub/dispatch.h>
 #include <libaegisub/make_unique.h>
 #include <libaegisub/background_runner.h>
 #include <libaegisub/log.h>
+#include <libaegisub/format.h>
+#include <libaegisub/scoped_ptr.h>
 
 namespace {
 
@@ -50,20 +52,29 @@ namespace {
 /// @brief Implements video loading through BestSource.
 class BSVideoProvider final : public VideoProvider {
 	std::map<std::string, std::string> bsopts;
-	BestVideoSource bs;
-	VideoProperties properties;
+	bool apply_rff;
+
+	std::unique_ptr<BestVideoSource> bs;
+	BSVideoProperties properties;
 
 	std::vector<int> Keyframes;
 	agi::vfr::Framerate Timecodes;
+	AVPixelFormat pixfmt;
 	std::string colorspace;
+	int video_cs = -1;		// Reported or guessed color matrix of first frame
+	int video_cr = -1;		// Reported or guessed color range of first frame
 	bool has_audio = false;
+
+	bool is_linear = false;
+
+	agi::scoped_holder<SwsContext *> sws_context;
 
 public:
 	BSVideoProvider(agi::fs::path const& filename, std::string const& colormatrix, agi::BackgroundRunner *br);
 
 	void GetFrame(int n, VideoFrame &out) override;
 
-	void SetColorSpace(std::string const& matrix) override { } 	// TODO Follow Aegisub's colorspace forcing?
+	void SetColorSpace(std::string const& matrix) override { colorspace = matrix; }
 
 	int GetFrameCount() const override { return properties.NumFrames; };
 
@@ -73,76 +84,75 @@ public:
 
 	agi::vfr::Framerate GetFPS() const override { return Timecodes; };
 	std::string GetColorSpace() const override { return colorspace; };
-	std::string GetRealColorSpace() const override { return colorspace; };
+	std::string GetRealColorSpace() const override {
+		std::string result = ColorMatrix::colormatrix_description(video_cs, video_cr);
+		if (result == "") {
+			return "None";
+		}
+		return result;
+	};
 	std::vector<int> GetKeyFrames() const override { return Keyframes; };
 	std::string GetDecoderName() const override { return "BestSource"; };
 	bool WantsCaching() const override { return false; };
 	bool HasAudio() const override { return has_audio; };
 };
 
-// Match the logic from the ffms2 provider, but directly use libavutil's constants and don't abort when encountering an unknown color space
-std::string colormatrix_description(const AVFrame *frame) {
-	// Assuming TV for unspecified
-	std::string str = frame->color_range == AVCOL_RANGE_JPEG ? "PC" : "TV";
-
-	switch (frame->colorspace) {
-		case AVCOL_SPC_BT709:
-			return str + ".709";
-		case AVCOL_SPC_FCC:
-			return str + ".FCC";
-		case AVCOL_SPC_BT470BG:
-		case AVCOL_SPC_SMPTE170M:
-			return str + ".601";
-		case AVCOL_SPC_SMPTE240M:
-			return str + ".240M";
-		default:
-			return "None";
-	}
-}
-
 BSVideoProvider::BSVideoProvider(agi::fs::path const& filename, std::string const& colormatrix, agi::BackgroundRunner *br) try
-: bsopts()
-, bs(filename.string(), "", -1, false, OPT_GET("Provider/Video/BestSource/Threads")->GetInt(), GetBSCacheFile(filename), &bsopts)
+: apply_rff(OPT_GET("Provider/Video/BestSource/Apply RFF"))
+, sws_context(nullptr, sws_freeContext)
 {
-	bs.SetMaxCacheSize(OPT_GET("Provider/Video/BestSource/Max Cache Size")->GetInt() << 20);
-	bs.SetSeekPreRoll(OPT_GET("Provider/Video/BestSource/Seek Preroll")->GetInt());
-	try {
-		BestAudioSource dummysource(filename.string(), -1, 0, "");
-		has_audio = true;
-	} catch (AudioException const& err) {
-		has_audio = false;
-	}
+	provider_bs::CleanBSCache();
 
+	auto track_info = provider_bs::SelectTrack(filename, false);
+	has_audio = track_info.second;
+
+	if (track_info.first == provider_bs::TrackSelection::NoTracks)
+		throw VideoNotSupported("no video tracks found");
+	else if (track_info.first == provider_bs::TrackSelection::None)
+		throw agi::UserCancelException("video loading cancelled by user");
+
+	bool cancelled = false;
 	br->Run([&](agi::ProgressSink *ps) {
-		ps->SetTitle(from_wx(_("Exacting")));
-		ps->SetMessage(from_wx(_("Creating cache... This can take a while!")));
-		ps->SetIndeterminate();
-		if (bs.GetExactDuration()) {
-			LOG_D("provider/video/bestsource") << "File cached and has exact samples.";
+		ps->SetTitle(from_wx(_("Indexing")));
+		ps->SetMessage(from_wx(_("Decoding the full track to ensure perfect frame accuracy. This will take a while!")));
+		try {
+			bs = agi::make_unique<BestVideoSource>(filename.string(), "", 0, static_cast<int>(track_info.first), false, OPT_GET("Provider/Video/BestSource/Threads")->GetInt(), 1, provider_bs::GetCacheFile(filename), &bsopts, [=](int Track, int64_t Current, int64_t Total) {
+				ps->SetProgress(Current, Total);
+				return !ps->IsCancelled();
+			});
+		} catch (BestSourceException const& err) {
+			if (std::string(err.what()) == "Indexing canceled by user")
+				cancelled = true;
+			else
+				throw err;
 		}
 	});
-	properties = bs.GetVideoProperties();
+	if (cancelled)
+		throw agi::UserCancelException("video loading cancelled by user");
+
+	bs->SetMaxCacheSize(OPT_GET("Provider/Video/BestSource/Max Cache Size")->GetInt() << 20);
+	bs->SetSeekPreRoll(OPT_GET("Provider/Video/BestSource/Seek Preroll")->GetInt());
+
+	properties = bs->GetVideoProperties();
 
 	br->Run([&](agi::ProgressSink *ps) {
 		ps->SetTitle(from_wx(_("Scanning")));
-		ps->SetMessage(from_wx(_("Finding Keyframes and Timecodes...")));
+		ps->SetMessage(from_wx(_("Reading timecodes and frame/sample data")));
 
 		std::vector<int> TimecodesVector;
 		for (int n = 0; n < properties.NumFrames; n++) {
-			if (ps->IsCancelled()) {
-				return;
-			}
-			std::unique_ptr<BestVideoFrame> frame(bs.GetFrame(n));
-			if (frame == nullptr) {
-				throw VideoOpenError("Couldn't read frame!");
-			}
-
-			if (frame->GetAVFrame()->key_frame) {
+			const BestVideoSource::FrameInfo &info = bs->GetFrameInfo(n);
+			if (info.KeyFrame) {
 				Keyframes.push_back(n);
 			}
 
-			TimecodesVector.push_back(1000 * frame->Pts * properties.TimeBase.Num / properties.TimeBase.Den);
-			ps->SetProgress(n, properties.NumFrames);
+			TimecodesVector.push_back(1000 * info.PTS * properties.TimeBase.Num / properties.TimeBase.Den);
+
+			if (n % 16 == 0) {
+				if (ps->IsCancelled())
+					return;
+				ps->SetProgress(n, properties.NumFrames);
+			}
 		}
 
 		if (TimecodesVector.size() < 2 || TimecodesVector.front() == TimecodesVector.back()) {
@@ -152,51 +162,67 @@ BSVideoProvider::BSVideoProvider(agi::fs::path const& filename, std::string cons
 		}
 	});
 
-	BSCleanCache();
+	// Decode the first frame to get the color space and pixel format
+	std::unique_ptr<BestVideoFrame> frame(bs->GetFrame(0));
+	auto avframe = frame->GetAVFrame();
+	video_cs = avframe->colorspace;
+	video_cr = avframe->color_range;
+	ColorMatrix::guess_colorspace(video_cs, video_cr, properties.Width, properties.Height);
+	pixfmt = (AVPixelFormat) avframe->format;
 
-	// Decode the first frame to get the color space
-	std::unique_ptr<BestVideoFrame> frame(bs.GetFrame(0));
-	colorspace = colormatrix_description(frame->GetAVFrame());
+	sws_context = sws_getContext(
+			properties.Width, properties.Height, pixfmt,
+			properties.Width, properties.Height, AV_PIX_FMT_BGR0,
+			SWS_FULL_CHR_H_INT | SWS_FULL_CHR_H_INP | SWS_ACCURATE_RND | SWS_BICUBIC, nullptr, nullptr, nullptr);
+
+	if (sws_context == nullptr) {
+		throw VideoDecodeError("Cannot convert frame to RGB!");
+	}
+
+	SetColorSpace(colormatrix);
 }
-catch (VideoException const& err) {
-	throw VideoOpenError("Failed to create BestVideoSource");
+catch (BestSourceException const& err) {
+	throw VideoOpenError(agi::format("Failed to create BestVideoSource: %s",  + err.what()));
 }
 
 void BSVideoProvider::GetFrame(int n, VideoFrame &out) {
-	std::unique_ptr<BestVideoFrame> bsframe(bs.GetFrame(n));
+	std::unique_ptr<BestVideoFrame> bsframe(apply_rff ? bs->GetFrameWithRFF(n) : bs->GetFrame(n));
 	if (bsframe == nullptr) {
 		throw VideoDecodeError("Couldn't read frame!");
 	}
-	const AVFrame *frame = bsframe->GetAVFrame();
 
-	SwsContext *context = sws_getContext(
-			frame->width, frame->height, (AVPixelFormat) frame->format,  	// TODO figure out aegi's color space forcing.
-			frame->width, frame->height, AV_PIX_FMT_BGR0,
-			SWS_BICUBIC, nullptr, nullptr, nullptr);
+	if (!is_linear && bs->GetLinearDecodingState()) {
+		agi::dispatch::Main().Async([] {
+			wxMessageBox(_("BestSource had to fall back to linear decoding. Seeking through the video will be very slow now. You may want to try a different video provider, but note that those are not guaranteed to be frame-exact."), _("Warning"), wxOK | wxICON_WARNING | wxCENTER);
+		});
 
-	if (context == nullptr) {
-		throw VideoDecodeError("Couldn't convert frame!");
+		is_linear = true;
 	}
 
-	int range = frame->color_range == AVCOL_RANGE_JPEG;
-	const int *coefficients = sws_getCoefficients(frame->colorspace == AVCOL_SPC_UNSPECIFIED ? AVCOL_SPC_BT709 : frame->colorspace);
+	const AVFrame *frame = bsframe->GetAVFrame();
 
-    sws_setColorspaceDetails(context,
-        coefficients, range,
-        coefficients, range,
-        0, 1 << 16, 1 << 16);
+	int cs = frame->colorspace;
+	int cr = frame->color_range;
+	ColorMatrix::override_colormatrix(cs, cr, colorspace, properties.Width, properties.Height);
+	const int *coefficients = sws_getCoefficients(cs);
+
+	if (frame->format != pixfmt || frame->width != properties.Width || frame->height != properties.Height)
+		throw VideoDecodeError("Video has variable format!");
+
+	sws_setColorspaceDetails(sws_context,
+		coefficients, cr == AVCOL_RANGE_JPEG,
+		coefficients, cr == AVCOL_RANGE_JPEG,
+		0, 1 << 16, 1 << 16);
 
 	out.data.resize(frame->width * frame->height * 4);
 	uint8_t *data[1] = {&out.data[0]};
 	int stride[1] = {frame->width * 4};
-	sws_scale(context, frame->data, frame->linesize, 0, frame->height, data, stride);
+	sws_scale(sws_context, frame->data, frame->linesize, 0, frame->height, data, stride);
 
 	out.width = frame->width;
 	out.height = frame->height;
 	out.pitch = stride[0];
 	out.flipped = false; 		// TODO figure out flipped
-
-	sws_freeContext(context);
 }
 
 }

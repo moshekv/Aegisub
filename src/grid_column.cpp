@@ -150,9 +150,7 @@ struct GridColumnFolds final : GridColumn {
 	bool OnMouseEvent(AssDialogue *d, agi::Context *c, wxMouseEvent &event) const override {
 		if ((event.LeftDown() || event.LeftDClick()) && !event.ShiftDown() && !event.CmdDown() && !event.AltDown()) {
 			if (d->Fold.hasFold() && !d->Fold.isEnd()) {
-				std::vector<AssDialogue *> lines;
-				lines.push_back(d);
-				c->foldController->ToggleFoldsAt(lines);
+				c->foldController->ToggleFoldsAt({d});
 				return true;
 			}
 		}
@@ -206,10 +204,15 @@ struct GridColumnStartTime final : GridColumnTime {
 	}
 
 	int Width(const agi::Context *c, WidthHelper &helper) const override {
-		if (!by_frame)
-			return helper(wxS("0:00:00.00"));
-		int frame = c->videoController->FrameAtTime(max_value(&AssDialogue::Start, c->ass->Events), agi::vfr::START);
-		return helper(std::to_wstring(frame));
+		agi::Time max_time = max_value(&AssDialogue::Start, c->ass->Events);
+		std::string value = by_frame ? std::to_string(c->videoController->FrameAtTime(max_time, agi::vfr::START)) : max_time.GetAssFormatted();
+
+		for (char &c : value) {
+			if (c >= '0' && c <= '9')
+				c = '0';
+		}
+
+		return helper(value);
 	}
 };
 
@@ -224,10 +227,15 @@ struct GridColumnEndTime final : GridColumnTime {
 	}
 
 	int Width(const agi::Context *c, WidthHelper &helper) const override {
-		if (!by_frame)
-			return helper(wxS("0:00:00.00"));
-		int frame = c->videoController->FrameAtTime(max_value(&AssDialogue::End, c->ass->Events), agi::vfr::END);
-		return helper(std::to_wstring(frame));
+		agi::Time max_time = max_value(&AssDialogue::End, c->ass->Events);
+		std::string value = by_frame ? std::to_string(c->videoController->FrameAtTime(max_time, agi::vfr::END)) : max_time.GetAssFormatted();
+
+		for (char &c : value) {
+			if (c >= '0' && c <= '9')
+				c = '0';
+		}
+
+		return helper(value);
 	}
 };
 

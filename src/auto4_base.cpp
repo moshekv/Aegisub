@@ -216,6 +216,7 @@ namespace Automation4 {
 			wxWindow *ww = config_dialog->CreateWindow(&w); // generate actual dialog contents
 			s->Add(ww, 0, wxALL, 5); // add contents to dialog
 			w.SetSizerAndFit(s);
+			w.SetLayoutAdaptationMode(wxDIALOG_ADAPTATION_MODE_ENABLED);
 			w.CenterOnParent();
 			w.ShowModal();
 		});
@@ -315,10 +316,13 @@ namespace Automation4 {
 
 		std::vector<std::future<std::unique_ptr<Script>>> script_futures;
 
-		auto path_it = agi::Split(path, '|');
-		for (auto tok : std::set<agi::StringRange>(begin(path_it), end(path_it))) {
+		std::set<agi::fs::path> dirnames;
+		for (auto tok : agi::Split(path, '|')) {
 			auto dirname = config::path->Decode(agi::str(tok));
 			if (!agi::fs::DirectoryExists(dirname)) continue;
+
+			if (dirnames.count(dirname)) continue;
+			dirnames.insert(dirname);
 
 			for (auto filename : agi::fs::DirectoryIterator(dirname, "*.*"))
 				script_futures.emplace_back(std::async(std::launch::async, [=] {

@@ -61,10 +61,12 @@ echo "---- Copying dictionaries ----"
 if test -f "${DICT_DIR}"; then
   cp -v "${DICT_DIR}/*" "${PKG_DIR}/Contents/SharedSupport/dictionaries"
 else
-  echo "Specified dictionary directory ${DICT_DIR} not found. Downloading dictionaries:"
-  mkdir "${BUILD_DIR}/dictionaries"
-  curl -L "https://downloads.sourceforge.net/project/openofficeorg.mirror/contrib/dictionaries/en_US.zip" -o "${BUILD_DIR}/dictionaries/en_US.zip"
-  unzip "${BUILD_DIR}/dictionaries/en_US.zip" -d "${BUILD_DIR}/dictionaries"
+  mkdir -p "${BUILD_DIR}/dictionaries"
+  if ! test -f "${BUILD_DIR}/dictionaries/en_US.aff"; then
+      echo "Specified dictionary directory ${DICT_DIR} not found. Downloading dictionaries:"
+      curl -L "https://raw.githubusercontent.com/TypesettingTools/Aegisub-dictionaries/master/dicts/en_US.aff" -o "${BUILD_DIR}/dictionaries/en_US.aff"
+      curl -L "https://raw.githubusercontent.com/TypesettingTools/Aegisub-dictionaries/master/dicts/en_US.dic" -o "${BUILD_DIR}/dictionaries/en_US.dic"
+  fi
   cp -v "${BUILD_DIR}/dictionaries/en_US.aff" "${PKG_DIR}/Contents/SharedSupport/dictionaries"
   cp -v "${BUILD_DIR}/dictionaries/en_US.dic" "${PKG_DIR}/Contents/SharedSupport/dictionaries"
 fi
@@ -102,6 +104,15 @@ mkdir -vp "${PKG_DIR}/Contents/Resources/en.lproj"
 echo
 echo "---- Fixing libraries ----"
 sudo python3 "${SRC_DIR}/tools/osx-fix-libs.py" "${PKG_DIR}/Contents/MacOS/aegisub" || exit $?
+
+echo
+echo "---- Resigning ----"
+# After bundling and rewriting dylib paths we need to resign everything.
+if codesign -d "${PKG_DIR}/Contents/MacOS/aegisub"; then
+  for fname in "${PKG_DIR}/Contents/MacOS/"*; do
+    codesign -s ${AEGISUB_BUNDLE_SIGNATURE:--} -vf "${fname}"
+  done
+fi
 
 echo
 echo "Done creating \"${PKG_DIR}\""

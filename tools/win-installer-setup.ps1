@@ -33,7 +33,7 @@ if (!(Test-Path DependencyControl)) {
 
 # YUtils
 if (!(Test-Path YUtils)) {
-	git clone https://github.com/arch1t3cht/YUtils.git
+	git clone https://github.com/TypesettingTools/YUtils.git
 }
 
 # luajson
@@ -43,8 +43,7 @@ if (!(Test-Path luajson)) {
 
 # Avisynth
 if (!(Test-Path AviSynthPlus64)) {
-	$avsReleases = Invoke-WebRequest "https://api.github.com/repos/AviSynth/AviSynthPlus/releases/latest" -Headers $GitHeaders -UseBasicParsing | ConvertFrom-Json
-	$avsUrl = $avsReleases.assets[0].browser_download_url
+	$avsUrl = "https://github.com/AviSynth/AviSynthPlus/releases/download/v3.7.3/AviSynthPlus_3.7.3_20230715-filesonly.7z"
 	Invoke-WebRequest $avsUrl -OutFile AviSynthPlus.7z -UseBasicParsing
 	7z x AviSynthPlus.7z
 	Rename-Item (Get-ChildItem -Filter "AviSynthPlus_*" -Directory) AviSynthPlus64
@@ -75,15 +74,15 @@ if (!(Test-Path L-SMASH-Works)) {
 	Remove-Item release-x86_64-cachedir-cwd.zip
 }
 
-# bestaudiosource
-if (!(Test-Path bestaudiosource)) {
-	$basDir = New-Item -ItemType Directory bestaudiosource
-	Set-Location $basDir
-	$basReleases = Invoke-WebRequest "https://api.github.com/repos/vapoursynth/bestaudiosource/releases/latest" -Headers $GitHeaders -UseBasicParsing | ConvertFrom-Json
-	$basUrl = $basReleases.assets[0].browser_download_url
-	Invoke-WebRequest $basUrl -OutFile bas-r1.7z -UseBasicParsing
-	7z x bas-r1.7z
-	Remove-Item bas-r1.7z
+# BestSource
+if (!(Test-Path BestSource)) {
+	$bsDir = New-Item -ItemType Directory BestSource
+	Set-Location $bsDir
+	$basReleases = Invoke-WebRequest "https://api.github.com/repos/vapoursynth/bestsource/releases/latest" -Headers $GitHeaders -UseBasicParsing | ConvertFrom-Json
+	$bsUrl = $basReleases.assets[0].browser_download_url
+	Invoke-WebRequest $bsUrl -OutFile bestsource.7z -UseBasicParsing
+	7z x bestsource.7z
+	Remove-Item bestsource.7z
 	Set-Location $DepsDir
 }
 
@@ -126,13 +125,19 @@ if (!(Test-Path VC_redist)) {
 	Invoke-WebRequest https://aka.ms/vs/17/release/VC_redist.x64.exe -OutFile "$redistDir\VC_redist.x64.exe" -UseBasicParsing
 }
 
+# XAudio2 redistributable
+if (!(Test-Path XAudio2_redist)) {
+	New-Item -ItemType Directory XAudio2_redist
+	Invoke-WebRequest https://www.nuget.org/api/v2/package/Microsoft.XAudio2.Redist/1.2.11 -OutFile XAudio2Redist.zip
+	Expand-Archive -LiteralPath XAudio2Redist.zip -DestinationPath XAudio2_redist
+	Remove-Item XAudio2Redist.zip
+}
+
 # dictionaries
 if (!(Test-Path dictionaries)) {
 	New-Item -ItemType Directory dictionaries
-	[Net.ServicePointManager]::SecurityProtocol = "Tls12" 	# Needed since otherwise downloading fails in some places like on the GitHub CI: https://stackoverflow.com/a/66614041/4730656
-	Invoke-WebRequest https://downloads.sourceforge.net/project/openofficeorg.mirror/contrib/dictionaries/en_US.zip -UserAgent "Wget" -OutFile en_US.zip -UseBasicParsing
-	Expand-Archive -LiteralPath en_US.zip -DestinationPath dictionaries
-	Remove-Item en_US.zip
+	Invoke-WebRequest https://raw.githubusercontent.com/TypesettingTools/Aegisub-dictionaries/master/dicts/en_US.aff -OutFile dictionaries/en_US.aff -UseBasicParsing
+	Invoke-WebRequest https://raw.githubusercontent.com/TypesettingTools/Aegisub-dictionaries/master/dicts/en_US.dic -OutFile dictionaries/en_US.dic -UseBasicParsing
 }
 
 # localization

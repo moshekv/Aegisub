@@ -35,13 +35,15 @@
 #include <libaegisub/split.h>
 #include <libaegisub/util.h>
 
+#include <libaegisub/log.h>
+
 #include <cmath>
 #include <wx/colour.h>
 
 static const float pi = 3.1415926536f;
 static const float deg2rad = pi / 180.f;
 static const float rad2deg = 180.f / pi;
-static const float screen_z = 312.5;
+static const float default_screen_z = 312.5;
 static const char *ambient_plane_key = "_aegi_perspective_ambient_plane";
 
 static const int BUTTON_ID_BASE = 1400;
@@ -123,6 +125,10 @@ std::vector<Vector2D> MakeRect(Vector2D a, Vector2D b) {
 		Vector2D(b.X(), b.Y()),
 		Vector2D(a.X(), b.Y()),
 	});
+}
+
+inline float VisualToolPerspective::screenZ() const {
+	return default_screen_z * script_res.Y() / layout_res.Y();
 }
 
 void VisualToolPerspective::AddTool(std::string command_name, VisualToolPerspectiveSetting setting) {
@@ -329,10 +335,10 @@ void VisualToolPerspective::Draw() {
 		// Transform grid
 		gl.SetOrigin(FromScriptCoords(org));
 		gl.SetScale(100 * video_res / script_res);
-		gl.SetRotation(angle_x, angle_y, angle_z);
+		gl.SetRotation(angle_x, angle_y, angle_z, script_res.Y() / layout_res.Y());
 		gl.SetScale(fsc);
 		gl.SetShear(fax, fay);
-		Vector2D glScale = textheight * Vector2D(1, 1) / spacing / 4;
+		Vector2D glScale = (bbox.second.Y() - bbox.first.Y()) * Vector2D(1, 1) / spacing / 4;
 		gl.SetScale(100 * glScale);
 
 		// Draw grid
@@ -589,7 +595,7 @@ bool VisualToolPerspective::InnerToText() {
 		// with the following coefficients.
 		float a = (1 - z1) * (1 - z3);
 		Vector2D b = z1 * v1 + z3 * v3 - z1 * z3 * (v1 + v3);
-		float c = z1 * z3 * v1.Dot(v3) + (z1 - 1) * (z3 - 1) * screen_z * screen_z;
+		float c = z1 * z3 * v1.Dot(v3) + (z1 - 1) * (z3 - 1) * screenZ() * screenZ();
 
 		// Our default value for t, which would put \org at the center of the quad.
 		// We'll try to find a value for \org that's as close as possible to it.
@@ -633,10 +639,10 @@ bool VisualToolPerspective::InnerToText() {
 	q2 = q2 - org;
 	q3 = q3 - org;
 
-	Vector3D r0 = Vector3D(q0, screen_z);
-	Vector3D r1 = z1 * Vector3D(q1, screen_z);
-	Vector3D r2 = (z1 + z3 - 1) * Vector3D(q2, screen_z);
-	Vector3D r3 = z3 * Vector3D(q3, screen_z);
+	Vector3D r0 = Vector3D(q0, screenZ());
+	Vector3D r1 = z1 * Vector3D(q1, screenZ());
+	Vector3D r2 = (z1 + z3 - 1) * Vector3D(q2, screenZ());
+	Vector3D r3 = z3 * Vector3D(q3, screenZ());
 	std::vector<Vector3D> r({r0, r1, r2, r3});
 
 	// Find the z coordinate of the point projecting to the origin
@@ -646,9 +652,9 @@ bool VisualToolPerspective::InnerToText() {
 	Solve2x2(side0.X(), side1.X(), side0.Y(), side1.Y(), -r0.X(), -r0.Y(), orgla0, orgla1);
 	float orgz = (r0 + orgla0 * side0 + orgla1 * side1).Z();
 
-	// Normalize so the origin has z=screen_z, and move the screen plane to z=0
+	// Normalize so the origin has z=screenZ, and move the screen plane to z=0
 	for (int i = 0; i < 4; i++)
-		r[i] = r[i] * screen_z / orgz - Vector3D(0, 0, screen_z);
+		r[i] = r[i] * screenZ() / orgz - Vector3D(0, 0, screenZ());
 
 	// Find the rotations
 	Vector3D n = (r[1] - r[0]).Cross(r[3] - r[0]);
@@ -678,17 +684,18 @@ bool VisualToolPerspective::InnerToText() {
 
 	float quadwidth = ab.Len();
 	float quadheight = abs(ad.Y());
-	float scalex = quadwidth / textwidth;
-	float scaley = quadheight / textheight;
+	float scalex = quadwidth / std::max(bbox.second.X() - bbox.first.X(), 1.0f);
+	float scaley = quadheight / std::max(bbox.second.Y() - bbox.first.Y(), 1.0f);
+	Vector2D scale = Vector2D(scalex, scaley);
 
 	float shiftv = align <= 3 ? 1 : (align <= 6 ? 0.5 : 0);
 	float shifth = align % 3 == 0 ? 1 : (align % 3 == 2 ? 0.5 : 0);
-	pos = org + r[0].XY() + Vector2D(quadwidth * shifth, quadheight * shiftv);
+	pos = org + r[0].XY() - bbox.first * scale + Vector2D(quadwidth * shifth, quadheight * shiftv);
 	angle_x = rotx * rad2deg;
 	angle_y = -roty * rad2deg;
 	angle_z = -rotz * rad2deg;
 	Vector2D oldfsc = fsc;
-	fsc = 100 * Vector2D(scalex, scaley);
+	fsc = 100 * scale;
 	fax = rawfax * scaley / scalex;
 	fay = 0;
 
@@ -779,40 +786,39 @@ void VisualToolPerspective::TextToPersp() {
 
 	align = GetLineAlignment(active_line);
 
-	double descend, extlead;
-	GetLineBaseExtents(active_line, textwidth, textheight, descend, extlead);
-	textwidth = std::max(textwidth, 1.);
-	textheight = std::max(textheight, 1.);
-	double textleft, texttop = 0.;
+	bbox = GetLineBaseExtents(active_line);
+	float textwidth = std::max(bbox.second.X() - bbox.first.X(), 1.f);
+	float textheight = std::max(bbox.second.Y() - bbox.first.Y(), 1.f);
+	double shiftx = 0., shifty = 0.;
 
 	switch ((align - 1) % 3) {
 		case 1:
-			textleft = -textwidth / 2;
+			shiftx = -textwidth / 2;
 			break;
 		case 2:
-			textleft = -textwidth;
+			shiftx = -textwidth;
 			break;
 		default:
 			break;
 	}
 	switch ((align - 1) / 3) {
 		case 0:
-			texttop = -textheight;
+			shifty = -textheight;
 			break;
 		case 1:
-			texttop = -textheight / 2;
+			shifty = -textheight / 2;
 			break;
 		default:
 			break;
 	}
 
-	std::vector<Vector2D> textrect = MakeRect(Vector2D(0, 0), Vector2D(textwidth, textheight));
+	std::vector<Vector2D> textrect = MakeRect(bbox.first, bbox.second);
 	for (int i = 0; i < 4; i++) {
 		Vector2D p = textrect[i];
 		// Apply \fax and \fay
 		p = Vector2D(p.X() + p.Y() * fax, p.X() * fay + p.Y());
 		// Translate to alignment point
-		p = p + Vector2D(textleft, texttop);
+		p = p + Vector2D(shiftx, shifty);
 		// Apply scaling
 		p = Vector2D(p.X() * fsc.X() / 100., p.Y() * fsc.Y() / 100.);
 		// Translate relative to origin
@@ -823,7 +829,7 @@ void VisualToolPerspective::TextToPersp() {
 		q = q.RotateX(-angle_x * deg2rad);
 		q = q.RotateY(angle_y * deg2rad);
 		// Project
-		q = (screen_z / (q.Z() + screen_z)) * q;
+		q = (screenZ() / (q.Z() + screenZ())) * q;
 		// Move to origin
 		Vector2D r = q.XY() + org;
 		inner_corners[i]->pos = FromScriptCoords(r);
