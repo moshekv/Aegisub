@@ -40,12 +40,14 @@ class wxWindow;
 /// @class SubsEditCtrlBase
 /// @brief Shared part of the subtitle text editors
 ///
-/// The interface SubsEditBox, DialogTranslation and TextSelectionController
-/// drive the editor through, and what editor implementations have in common:
-/// tokenizing, spell checking, the thesaurus and the context menu.
+/// Lets the Scintilla control and the native text control used for
+/// bidirectional editing be driven interchangeably by SubsEditBox,
+/// DialogTranslation and TextSelectionController, and holds what they have in
+/// common: tokenizing, spell checking, the thesaurus and the context menu.
 ///
 /// All offsets are UTF-8 **byte** offsets, matching AssDialogue::Text and the
-/// rest of Aegisub.
+/// rest of Aegisub. Scintilla is natively byte-based; the native control is
+/// not, so its implementation converts.
 class SubsEditCtrlBase {
 	/// Add the thesaurus suggestions to a menu
 	void AddThesaurusEntries(wxMenu &menu);
@@ -148,5 +150,6 @@ public:
 	std::function<void (bool start_of_action)> on_text_modified;
 };
 
-/// Create the subtitle text editor
+/// Create the editor selected by Subtitle/Edit Box/Right-to-Left: the native
+/// bidirectional one, or Scintilla
 SubsEditCtrlBase *CreateSubsEditCtrl(wxWindow *parent, wxSize size, long style, agi::Context *context);

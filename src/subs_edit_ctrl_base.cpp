@@ -41,6 +41,7 @@
 #include "include/aegisub/spellchecker.h"
 #include "selection_controller.h"
 #include "subs_edit_ctrl.h"
+#include "subs_plain_edit_ctrl.h"
 #include "thesaurus.h"
 #include "utils.h"
 
@@ -83,6 +84,8 @@ enum {
 };
 
 SubsEditCtrlBase *CreateSubsEditCtrl(wxWindow *parent, wxSize size, long style, agi::Context *context) {
+	if (OPT_GET("Subtitle/Edit Box/Right-to-Left")->GetBool())
+		return new SubsPlainTextEditCtrl(parent, size, style, context);
 	return new SubsTextEditCtrl(parent, size, style, context);
 }
 

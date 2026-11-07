@@ -119,6 +119,7 @@ aegisub_src = files(
     'subs_edit_box.cpp',
     'subs_edit_ctrl.cpp',
     'subs_edit_ctrl_base.cpp',
+    'subs_plain_edit_ctrl.cpp',
     'subs_preview.cpp',
     'subtitle_format.cpp',
     'subtitle_format_ass.cpp',

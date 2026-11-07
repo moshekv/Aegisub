@@ -416,7 +416,8 @@
 		"Edit Box" : {
 			"Soft Line Break": false,
 			"Font Face" : "",
-			"Font Size" : 10
+			"Font Size" : 10,
+			"Right-to-Left" : false
 		},
 		"Grid" : {
 			"Column" : [
