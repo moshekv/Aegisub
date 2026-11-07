@@ -247,6 +247,7 @@ SubsEditBox::SubsEditBox(wxWindow *parent, agi::Context *context)
 		context->selectionController->AddActiveLineListener(&SubsEditBox::OnActiveLineChanged, this),
 		context->selectionController->AddSelectionListener(&SubsEditBox::OnSelectedSetChanged, this),
 		context->initialLineState->AddChangeListener(&SubsEditBox::OnLineInitialTextChanged, this),
+		OPT_SUB("Subtitle/Edit Box/Right-to-Left", &SubsEditBox::OnEditorChanged, this),
 	 });
 
 	context->textSelectionController->SetControl(edit_ctrl);
@@ -455,6 +456,25 @@ SubsEditCtrlBase *SubsEditBox::MakeEditCtrl() {
 	ctrl->AsWindow()->Bind(wxEVT_CHAR_HOOK, &SubsEditBox::OnKeyDown, this);
 	ctrl->on_text_modified = [this](bool start_of_action) { OnChange(start_of_action); };
 	return ctrl;
+}
+
+void SubsEditBox::OnEditorChanged() {
+	wxWindow *old = edit_ctrl->AsWindow();
+	bool had_focus = old->HasFocus();
+
+	edit_ctrl = MakeEditCtrl();
+	wxWindow *ctrl = edit_ctrl->AsWindow();
+	ctrl->SetInitialSize(old->GetSize());
+	ctrl->MoveAfterInTabOrder(old);
+	GetSizer()->Replace(old, ctrl);
+
+	// Detaches the old control before it goes away
+	c->textSelectionController->SetControl(edit_ctrl);
+	old->Destroy();
+
+	if (line) edit_ctrl->SetTextTo(line->Text);
+	Layout();
+	if (had_focus) ctrl->SetFocus();
 }
 
 void SubsEditBox::OnChange(bool start_of_action) {
