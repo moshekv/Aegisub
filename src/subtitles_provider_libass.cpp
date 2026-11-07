@@ -89,6 +89,9 @@ class LibassSubtitlesProvider final : public SubtitlesProvider {
 	std::shared_ptr<cache_thread_shared> shared;
 	ASS_Track* ass_track = nullptr;
 
+	/// Whether any loaded script had right-to-left lines
+	bool has_rtl = false;
+
 	ASS_Renderer *renderer() {
 		if (shared->ready)
 			return shared->renderer;
@@ -123,6 +126,31 @@ public:
 		if (ass_track) ass_free_track(ass_track);
 		ass_track = ass_read_memory(library, const_cast<char *>(data), len, nullptr);
 		if (!ass_track) throw agi::InternalError("libass failed to load subtitles.");
+
+		// Off by default for VSFilter compatibility, but required for correct
+		// rendering of right-to-left text: without WHOLE_TEXT_LAYOUT libass
+		// runs the bidi algorithm separately on each override-tag-delimited
+		// segment and then lays the segments out left-to-right. As it also
+		// changes shaping across tags, only enable it for scripts that have
+		// right-to-left lines, so that every other script still previews as
+		// VSFilter renders it. This may fail at runtime depending on how
+		// libass was built, which is not an error.
+		//
+		// Sticky, as after an edit only the lines on the current frame are
+		// loaded, and the layout must not flip between those and a full load.
+		// ponytail: stays on after the last right-to-left line is deleted,
+		// until the provider is recreated (e.g. the video is reopened).
+		//
+		// Deliberately not BIDI_BRACKETS: libass (0.17.5 and master) only
+		// allocates its bracket buffer when the shaper's buffers grow, and the
+		// renderer is shared, so enabling it after something was rendered
+		// without it makes fribidi write past the buffer and crash.
+		for (int i = 0; i < ass_track->n_events && !has_rtl; ++i)
+			has_rtl = ass_track->events[i].Text && agi::util::is_rtl(ass_track->events[i].Text);
+#if LIBASS_VERSION >= 0x01600000
+		if (has_rtl)
+			ass_track_set_feature(ass_track, ASS_FEATURE_WHOLE_TEXT_LAYOUT, true);
+#endif
 	}
 
 	void DrawSubtitles(VideoFrame &dst, double time) override;
