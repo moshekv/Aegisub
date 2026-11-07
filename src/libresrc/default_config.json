@@ -386,7 +386,7 @@
 			"Soft Line Break": false,
 			"Font Face" : "",
 			"Font Size" : 10,
-			"Right-to-Left" : false
+			"Right-to-Left" : true
 		},
 		"Grid" : {
 			"Column" : [

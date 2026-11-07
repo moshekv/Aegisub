@@ -6,7 +6,8 @@
     },
     "Subtitle" : {
         "Edit Box" : {
-            "Font Size" : 13
+            "Font Size" : 13,
+            "Right-to-Left" : false
         },
         "Grid" : {
             "Font Face" : "",
