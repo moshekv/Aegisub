@@ -391,7 +391,7 @@ void BaseGrid::OnPaint(wxPaintEvent &) {
 		int y = (i + 1) * lineHeight;
 		for (size_t j : agi::util::range(columns.size())) {
 			if (paint_columns[j])
-				columns[j]->Paint(dc, x, y, curDiag, context);
+				columns[j]->Paint(dc, x, y, w, curDiag, context);
 			x += columns[j]->Width();
 		}
 
