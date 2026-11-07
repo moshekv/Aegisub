@@ -46,6 +46,7 @@
 #include <libaegisub/character_count.h>
 #include <libaegisub/make_unique.h>
 #include <libaegisub/spellchecker.h>
+#include <libaegisub/util.h>
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/algorithm/string/replace.hpp>
@@ -106,6 +107,12 @@ SubsTextEditCtrl::SubsTextEditCtrl(wxWindow* parent, wxSize wsize, long style, a
 	SetMarginWidth(1,0);
 	UsePopUp(false);
 	SetStyles();
+
+#if wxCHECK_VERSION(3, 3, 0) && defined(__WXMSW__)
+	// Scintilla's bidirectional support requires the DirectWrite backend and
+	// does nothing under GDI
+	SetTechnology(wxSTC_TECHNOLOGY_DIRECTWRITE);
+#endif
 
 	// Set hotkeys
 	CmdKeyClear(wxSTC_KEY_RETURN,wxSTC_KEYMOD_CTRL);
@@ -277,6 +284,13 @@ void SubsTextEditCtrl::SetStyles() {
 }
 
 void SubsTextEditCtrl::UpdateStyle() {
+#if wxCHECK_VERSION(3, 3, 0)
+	// Done here rather than in SetTextTo so that typing or pasting a different
+	// first strong character also updates it. Only actually supported by
+	// Scintilla on Windows (with DirectWrite) and macOS; a no-op elsewhere.
+	SetBidirectional(agi::util::is_rtl(line_text) ? wxSTC_BIDIRECTIONAL_R2L : wxSTC_BIDIRECTIONAL_L2R);
+#endif
+
 	AssDialogue *diag = context ? context->selectionController->GetActiveLine() : nullptr;
 	bool template_line = diag && diag->Comment && (boost::istarts_with(diag->Effect.get(), "template") || boost::istarts_with(diag->Effect.get(), "mixin"));
 
