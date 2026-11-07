@@ -353,6 +353,9 @@ endif
 
 conf_platform = configuration_data()
 conf_platform.set('DEFAULT_PLAYER_AUDIO', def_audio)
+# Scintilla cannot lay out bidirectional text on GTK at all, so default to the
+# native editor there; macOS keeps Scintilla, which supports it with wx 3.3
+conf_platform.set('DEFAULT_RTL_EDITOR', host_machine.system() == 'darwin' ? 'false' : 'true')
 
 luajit = dependency('luajit', version: '>=2.0.0', required: get_option('system_luajit'))
 if luajit.found() and luajit.type_name() != 'internal'

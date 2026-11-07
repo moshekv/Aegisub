@@ -6,5 +6,10 @@
 		"VapourSynth" : {
 			"Autoload User Plugins": false
 		}
+	},
+	"Subtitle" : {
+		"Edit Box" : {
+			"Right-to-Left" : true
+		}
 	}
 }

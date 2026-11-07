@@ -1,5 +1,10 @@
 {
 	"Audio" : {
 		"Player" : "@DEFAULT_PLAYER_AUDIO@",
+	},
+	"Subtitle" : {
+		"Edit Box" : {
+			"Right-to-Left" : @DEFAULT_RTL_EDITOR@
+		}
 	}
 }
