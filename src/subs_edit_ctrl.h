@@ -27,6 +27,8 @@
 //
 // Aegisub Project http://www.aegisub.org/
 
+#include <libaegisub/signal.h>
+
 #include <memory>
 #include <string>
 #include <vector>
@@ -72,6 +74,9 @@ class SubsTextEditCtrl final : public wxStyledTextCtrl {
 
 	/// Cursor position which the current calltip is for
 	int cursor_pos;
+
+	/// Option subscriptions, which must not outlive the control
+	std::vector<agi::signal::Connection> connections;
 
 	/// The last seen line text, used to avoid reparsing the line for syntax
 	/// highlighting when possible

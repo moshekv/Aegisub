@@ -148,14 +148,14 @@ SubsTextEditCtrl::SubsTextEditCtrl(wxWindow* parent, wxSize wsize, long style, a
 		UpdateStyle();
 	});
 
-	OPT_SUB("Subtitle/Edit Box/Font Face", &SubsTextEditCtrl::SetStyles, this);
-	OPT_SUB("Subtitle/Edit Box/Font Size", &SubsTextEditCtrl::SetStyles, this);
+	connections.push_back(OPT_SUB("Subtitle/Edit Box/Font Face", &SubsTextEditCtrl::SetStyles, this));
+	connections.push_back(OPT_SUB("Subtitle/Edit Box/Font Size", &SubsTextEditCtrl::SetStyles, this));
 	Subscribe("Normal");
 	Subscribe("Comment");
 	Subscribe("Drawing Command");
 	Subscribe("Drawing X");
 	Subscribe("Drawing Y");
-	OPT_SUB("Colour/Subtitle/Syntax/Underline/Drawing Endpoint", &SubsTextEditCtrl::SetStyles, this);
+	connections.push_back(OPT_SUB("Colour/Subtitle/Syntax/Underline/Drawing Endpoint", &SubsTextEditCtrl::SetStyles, this));
 	Subscribe("Brackets");
 	Subscribe("Slashes");
 	Subscribe("Tags");
@@ -165,9 +165,9 @@ SubsTextEditCtrl::SubsTextEditCtrl(wxWindow* parent, wxSize wsize, long style, a
 	Subscribe("Karaoke Template");
 	Subscribe("Karaoke Variable");
 
-	OPT_SUB("Colour/Subtitle/Background", &SubsTextEditCtrl::SetStyles, this);
-	OPT_SUB("Subtitle/Highlight/Syntax", &SubsTextEditCtrl::UpdateStyle, this);
-	OPT_SUB("App/Call Tips", &SubsTextEditCtrl::UpdateCallTip, this);
+	connections.push_back(OPT_SUB("Colour/Subtitle/Background", &SubsTextEditCtrl::SetStyles, this));
+	connections.push_back(OPT_SUB("Subtitle/Highlight/Syntax", &SubsTextEditCtrl::UpdateStyle, this));
+	connections.push_back(OPT_SUB("App/Call Tips", &SubsTextEditCtrl::UpdateCallTip, this));
 
 	Bind(wxEVT_MENU, [=](wxCommandEvent&) {
 		if (spellchecker) spellchecker->AddWord(currentWord);
@@ -186,9 +186,9 @@ SubsTextEditCtrl::~SubsTextEditCtrl() {
 }
 
 void SubsTextEditCtrl::Subscribe(std::string const& name) {
-	OPT_SUB("Colour/Subtitle/Syntax/" + name, &SubsTextEditCtrl::SetStyles, this);
-	OPT_SUB("Colour/Subtitle/Syntax/Background/" + name, &SubsTextEditCtrl::SetStyles, this);
-	OPT_SUB("Colour/Subtitle/Syntax/Bold/" + name, &SubsTextEditCtrl::SetStyles, this);
+	connections.push_back(OPT_SUB("Colour/Subtitle/Syntax/" + name, &SubsTextEditCtrl::SetStyles, this));
+	connections.push_back(OPT_SUB("Colour/Subtitle/Syntax/Background/" + name, &SubsTextEditCtrl::SetStyles, this));
+	connections.push_back(OPT_SUB("Colour/Subtitle/Syntax/Bold/" + name, &SubsTextEditCtrl::SetStyles, this));
 }
 
 BEGIN_EVENT_TABLE(SubsTextEditCtrl,wxStyledTextCtrl)
