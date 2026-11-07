@@ -48,7 +48,7 @@ namespace agi { struct Context; }
 namespace agi { class Time; }
 class AssDialogue;
 class AssStyle;
-class SubsTextEditCtrl;
+class SubsEditCtrlBase;
 class TimeEdit;
 class wxButton;
 class wxCheckBox;
@@ -143,7 +143,8 @@ class SubsEditBox final : public wxPanel {
 	wxComboBox *MakeComboBox(wxString const& initial_text, int style, void (SubsEditBox::*handler)(wxCommandEvent&), wxString const& tooltip);
 	wxRadioButton *MakeRadio(wxString const& text, bool start, wxString const& tooltip);
 
-	void OnChange(wxStyledTextEvent &event);
+	void OnChange(bool start_of_action);
+	SubsEditCtrlBase *MakeEditCtrl();
 	void OnKeyDown(wxKeyEvent &event);
 
 	void OnActiveLineChanged(AssDialogue *new_line);
@@ -202,7 +203,7 @@ class SubsEditBox final : public wxPanel {
 
 	void SetDurationField();
 
-	SubsTextEditCtrl *edit_ctrl;
+	SubsEditCtrlBase *edit_ctrl;
 	wxTextCtrl *secondary_editor;
 
 public:
