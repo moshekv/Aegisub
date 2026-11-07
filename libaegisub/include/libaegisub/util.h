@@ -63,6 +63,12 @@ namespace agi::util {
 		void map_range(size_t& start, size_t& end);
 	};
 
+	/// Should this line be displayed right-to-left?
+	/// @param str UTF-8 string to inspect
+	/// @return Whether the first strong character is right-to-left, ignoring ASS
+	///         override blocks and \N \n \h escapes. False if there is none.
+	bool is_rtl(std::string const& str);
+
 	/// Set the name of the calling thread in the Visual Studio debugger
 	/// @param name New name for the thread
 	void SetThreadName(const char *name);
