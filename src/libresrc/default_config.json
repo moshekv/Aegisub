@@ -388,6 +388,7 @@
 			"Font Size" : 10,
 			"Right-to-Left" : true
 		},
+		"Right-to-Left Styles" : 1,
 		"Grid" : {
 			"Column" : [
 				{"bool" : true}

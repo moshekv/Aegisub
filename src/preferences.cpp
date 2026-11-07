@@ -276,6 +276,9 @@ void Interface(wxTreebook *book, Preferences *parent) {
 	p->OptionAdd(edit_box, _("Shift+Enter adds \\n"), "Subtitle/Edit Box/Soft Line Break");
 	p->OptionAdd(edit_box, _("Enable syntax highlighting"), "Subtitle/Highlight/Syntax");
 	p->OptionAdd(edit_box, _("Native editor with bidirectional and right-to-left text"), "Subtitle/Edit Box/Right-to-Left");
+	const wxString rtl_styles_arr[] = {_("Never"), _("Ask"), _("Always")};
+	wxArrayString choice_rtl_styles(3, rtl_styles_arr);
+	p->OptionChoice(edit_box, _("Make styles of right-to-left lines detect their direction"), choice_rtl_styles, "Subtitle/Right-to-Left Styles");
 	p->OptionBrowse(edit_box, _("Dictionaries path"), "Path/Dictionary");
 	p->OptionFont(edit_box, "Subtitle/Edit Box/");
 

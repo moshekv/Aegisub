@@ -35,10 +35,12 @@
 #include "subs_edit_box.h"
 
 #include "ass_dialogue.h"
+#include "ass_style.h"
 #include "ass_file.h"
 #include "base_grid.h"
 #include "command/command.h"
 #include "compat.h"
+#include "format.h"
 #include "dialog_style_editor.h"
 #include "flyweight_hash.h"
 #include "include/aegisub/context.h"
@@ -48,6 +50,7 @@
 #include "placeholder_ctrl.h"
 #include "project.h"
 #include "selection_controller.h"
+#include "subs_controller.h"
 #include "subs_edit_ctrl_base.h"
 #include "text_selection_controller.h"
 #include "timeedit_ctrl.h"
@@ -234,6 +237,10 @@ SubsEditBox::SubsEditBox(wxWindow *parent, agi::Context *context)
 		context->selectionController->AddSelectionListener(&SubsEditBox::OnSelectedSetChanged, this),
 		context->initialLineState->AddChangeListener(&SubsEditBox::OnLineInitialTextChanged, this),
 		OPT_SUB("Subtitle/Edit Box/Right-to-Left", &SubsEditBox::OnEditorChanged, this),
+		context->subsController->AddFileOpenListener([this](agi::fs::path const&) {
+			rtl_styles_checked.clear();
+			CallAfter(&SubsEditBox::CheckRtlStyles);
+		}),
 	 });
 
 	context->textSelectionController->SetControl(edit_ctrl);
@@ -406,6 +413,49 @@ void SubsEditBox::OnActiveLineChanged(AssDialogue *new_line) {
 	commit_id = -1;
 
 	UpdateFields(AssFile::COMMIT_DIAG_FULL, false);
+
+	// Catches right-to-left lines changed elsewhere, such as given a new style
+	CallAfter(&SubsEditBox::CheckRtlStyles);
+}
+
+void SubsEditBox::CheckRtlStyles() {
+	int mode = OPT_GET("Subtitle/Right-to-Left Styles")->GetInt(); // Never, Ask, Always
+	if (mode == 0) return;
+
+	// libass and VSFilter lay every line out left-to-right unless its style
+	// has Encoding -1, so players show right-to-left lines reversed
+	// ponytail: scans every line on each active line change; cheap next to
+	// UpdateFields, cache per line if it ever shows in a profile
+	std::vector<AssStyle *> styles;
+	for (auto const& diag : c->ass->Events) {
+		AssStyle *style = c->ass->GetStyle(diag.Style);
+		if (style && style->encoding != -1 && !rtl_styles_checked.count(style->name)
+			&& find(begin(styles), end(styles), style) == end(styles) && agi::util::is_rtl(diag.Text))
+			styles.push_back(style);
+	}
+	if (styles.empty()) return;
+
+	// Each style once per opened file, whatever the answer: undo restores the
+	// file through the same path, and must not have the fix reapplied
+	for (auto style : styles)
+		rtl_styles_checked.insert(style->name);
+
+	if (mode == 1) {
+		wxString names;
+		for (auto style : styles)
+			names += "\n" + to_wx(style->name);
+		bool yes = wxMessageBox(
+			fmt_tl("Players lay these styles out left-to-right, so their right-to-left lines appear reversed:\n%s\n\nSet them to detect the direction of each line (Encoding -1)? This works in libass-based players such as mpv and VLC.\n\nYour answer is remembered for all scripts. You can change it in Preferences > Interface.", names),
+			_("Right-to-left lines"), wxYES_NO | wxICON_QUESTION, this) == wxYES;
+		OPT_SET("Subtitle/Right-to-Left Styles")->SetInt(yes ? 2 : 0);
+		if (!yes) return;
+	}
+
+	for (auto style : styles) {
+		style->encoding = -1;
+		style->UpdateData(); // GetEntryData() is what is saved and rendered
+	}
+	c->ass->Commit(_("right-to-left styles"), AssFile::COMMIT_STYLES);
 }
 
 void SubsEditBox::OnSelectedSetChanged() {
@@ -468,6 +518,12 @@ void SubsEditBox::OnChange(bool start_of_action) {
 			commit_id = -1;
 		CommitText(_("modify text"));
 		UpdateCharacterCount(line->Text);
+
+		// Fix the style as soon as the line turns right-to-left, so that the
+		// preview follows while typing
+		AssStyle *style = c->ass->GetStyle(line->Style);
+		if (style && style->encoding != -1 && !rtl_styles_checked.count(style->name) && agi::util::is_rtl(line->Text))
+			CallAfter(&SubsEditBox::CheckRtlStyles);
 	}
 }
 
