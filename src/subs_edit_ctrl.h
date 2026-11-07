@@ -27,44 +27,17 @@
 //
 // Aegisub Project http://www.aegisub.org/
 
+#include "subs_edit_ctrl_base.h"
+
 #include <libaegisub/signal.h>
 
-#include <memory>
 #include <string>
 #include <vector>
 #include <wx/stc/stc.h>
 
-class Thesaurus;
-namespace agi {
-	class SpellChecker;
-	struct Context;
-	namespace ass { struct DialogueToken; }
-}
-
 /// @class SubsTextEditCtrl
 /// @brief A Scintilla control with spell checking and syntax highlighting
-class SubsTextEditCtrl final : public wxStyledTextCtrl {
-	/// Backend spellchecker to use
-	std::unique_ptr<agi::SpellChecker> spellchecker;
-
-	/// Backend thesaurus to use
-	std::unique_ptr<Thesaurus> thesaurus;
-
-	/// Project context, for splitting lines
-	agi::Context *context;
-
-	/// The word right-clicked on, used for spellchecker replacing
-	std::string currentWord;
-
-	/// The beginning of the word right-clicked on, for spellchecker replacing
-	std::pair<int, int> currentWordPos;
-
-	/// Spellchecker suggestions for the last right-clicked word
-	std::vector<std::string> sugs;
-
-	/// Thesaurus suggestions for the last right-clicked word
-	std::vector<std::string> thesSugs;
-
+class SubsTextEditCtrl final : public wxStyledTextCtrl, public SubsEditCtrlBase {
 	/// Text of the currently shown calltip, to avoid flickering from
 	/// pointlessly reshowing the current tip
 	std::string calltip_text;
@@ -78,20 +51,12 @@ class SubsTextEditCtrl final : public wxStyledTextCtrl {
 	/// Option subscriptions, which must not outlive the control
 	std::vector<agi::signal::Connection> connections;
 
-	/// The last seen line text, used to avoid reparsing the line for syntax
-	/// highlighting when possible
-	std::string line_text;
-
-	/// Tokenized version of line_text
-	std::vector<agi::ass::DialogueToken> tokenized_line;
-
 	void OnContextMenu(wxContextMenuEvent &);
 	void OnDoubleClick(wxStyledTextEvent&);
-	void OnUseSuggestion(wxCommandEvent &event);
-	void OnSetDicLanguage(wxCommandEvent &event);
-	void OnSetThesLanguage(wxCommandEvent &event);
 	void OnLoseFocus(wxFocusEvent &event);
 	void OnKeyDown(wxKeyEvent &event);
+	void OnUpdateUI(wxStyledTextEvent &event);
+	void OnModified(wxStyledTextEvent &event);
 
 	void SetSyntaxStyle(int id, wxFont &font, std::string const& name, wxColor const& default_background);
 	void Subscribe(std::string const& name);
@@ -100,28 +65,31 @@ class SubsTextEditCtrl final : public wxStyledTextCtrl {
 	void UpdateCallTip();
 	void SetStyles();
 
-	void UpdateStyle();
-
-	/// Add the thesaurus suggestions to a menu
-	void AddThesaurusEntries(wxMenu &menu);
-
-	/// Add the spell checker suggestions to a menu
-	void AddSpellCheckerEntries(wxMenu &menu);
-
-	/// Generate a languages submenu from a list of locales and a current language
-	/// @param base_id ID to use for the first menu item
-	/// @param curLang Currently selected language
-	/// @param lang Full list of languages
-	wxMenu *GetLanguagesMenu(int base_id, wxString const& curLang, wxArrayString const& langs);
+	void UpdateStyle() override;
+	void ReplaceTextUtf8(std::string const& text) override { SetTextRaw(text.c_str()); }
+	wxTextEntryBase *AsTextEntry() override { return this; }
 
 public:
 	SubsTextEditCtrl(wxWindow* parent, wxSize size, long style, agi::Context *context);
 	~SubsTextEditCtrl();
 
-	void SetTextTo(std::string const& text);
 	void Paste() override;
 
-	std::pair<int, int> GetBoundsOfWordAtPosition(int pos);
+	// SubsEditCtrlBase. Scintilla is natively UTF-8 byte based, so these are
+	// straight pass-throughs.
+	wxWindow *AsWindow() override { return this; }
+	bool ProcessImeKeyEvent(wxKeyEvent &event) override;
+	void SetTextTo(std::string const& text) override;
+	std::string GetTextUtf8() const override {
+		auto data = const_cast<SubsTextEditCtrl *>(this)->GetTextRaw();
+		return std::string(data.data(), data.length());
+	}
+	int GetInsertionPointBytes() const override { return const_cast<SubsTextEditCtrl *>(this)->GetInsertionPoint(); }
+	void SetInsertionPointBytes(int pos) override { SetInsertionPoint(pos); }
+	int GetSelectionStartBytes() const override { return const_cast<SubsTextEditCtrl *>(this)->GetSelectionStart(); }
+	int GetSelectionEndBytes() const override { return const_cast<SubsTextEditCtrl *>(this)->GetSelectionEnd(); }
+	void SetSelectionStartBytes(int pos) override { SetSelectionStart(pos); }
+	void SetSelectionEndBytes(int pos) override { SetSelectionEnd(pos); }
 
 	DECLARE_EVENT_TABLE()
 };

@@ -16,16 +16,17 @@
 
 #include "text_selection_controller.h"
 
-#include <wx/stc/stc.h>
+#include "subs_edit_ctrl_base.h"
 
-void TextSelectionController::SetControl(wxStyledTextCtrl *ctrl) {
+void TextSelectionController::SetControl(SubsEditCtrlBase *ctrl) {
+	if (this->ctrl) this->ctrl->on_selection_changed = nullptr;
 	this->ctrl = ctrl;
 	if (ctrl)
-		ctrl->Bind(wxEVT_STC_UPDATEUI, &TextSelectionController::UpdateUI, this);
+		ctrl->on_selection_changed = [this](bool selection_updated) { UpdateUI(selection_updated); };
 }
 
 TextSelectionController::~TextSelectionController() {
-	if (ctrl) ctrl->Unbind(wxEVT_STC_UPDATEUI, &TextSelectionController::UpdateUI, this);
+	if (ctrl) ctrl->on_selection_changed = nullptr;
 }
 
 #define GET(var, new_value) do { \
@@ -43,14 +44,14 @@ TextSelectionController::~TextSelectionController() {
 	}                                    \
 } while (false)
 
-void TextSelectionController::UpdateUI(wxStyledTextEvent &evt) {
+void TextSelectionController::UpdateUI(bool selection_updated) {
 	if (changing) return;
 
 	bool changed = false;
-	GET(insertion_point, ctrl->GetInsertionPoint());
-	if (evt.GetUpdated() & wxSTC_UPDATE_SELECTION) {
-		GET(selection_start, ctrl->GetSelectionStart());
-		GET(selection_end, ctrl->GetSelectionEnd());
+	GET(insertion_point, ctrl->GetInsertionPointBytes());
+	if (selection_updated) {
+		GET(selection_start, ctrl->GetSelectionStartBytes());
+		GET(selection_end, ctrl->GetSelectionEndBytes());
 	}
 	else {
 		GET(selection_start, insertion_point);
@@ -61,15 +62,15 @@ void TextSelectionController::UpdateUI(wxStyledTextEvent &evt) {
 
 void TextSelectionController::SetInsertionPoint(int position) {
 	changing = true;
-	SET(insertion_point, position, SetInsertionPoint);
+	SET(insertion_point, position, SetInsertionPointBytes);
 	changing = false;
 	AnnounceSelectionChanged();
 }
 
 void TextSelectionController::SetSelection(int start, int end) {
 	changing = true;
-	SET(selection_start, start, SetSelectionStart);
-	SET(selection_end, end, SetSelectionEnd);
+	SET(selection_start, start, SetSelectionStartBytes);
+	SET(selection_end, end, SetSelectionEndBytes);
 	changing = false;
 	AnnounceSelectionChanged();
 }

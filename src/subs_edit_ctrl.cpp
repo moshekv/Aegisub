@@ -30,31 +30,21 @@
 #include "subs_edit_ctrl.h"
 
 #include "ass_dialogue.h"
-#include "command/command.h"
 #include "compat.h"
-#include "format.h"
 #include "options.h"
 #include "include/aegisub/context.h"
-#include "include/aegisub/spellchecker.h"
 #include "selection_controller.h"
 #include "text_selection_controller.h"
-#include "thesaurus.h"
 #include "utils.h"
 
 #include <libaegisub/ass/dialogue_parser.h>
 #include <libaegisub/calltip_provider.h>
 #include <libaegisub/character_count.h>
-#include <libaegisub/make_unique.h>
-#include <libaegisub/spellchecker.h>
 #include <libaegisub/util.h>
 
-#include <boost/algorithm/string/predicate.hpp>
-#include <boost/algorithm/string/replace.hpp>
 #include <functional>
 
 #include <wx/clipbrd.h>
-#include <wx/intl.h>
-#include <wx/menu.h>
 #include <wx/settings.h>
 
 // Define macros for wxWidgets 3.1
@@ -68,37 +58,9 @@
 #define wxSTC_KEYMOD_NORM wxSTC_SCMOD_NORM
 #endif
 
-// Maximum number of languages (locales)
-// It should be above 100 (at least 242) and probably not more than 1000
-#define LANGS_MAX 1000
-
-/// Event ids
-// Check menu.h for id range allocation before editing this enum
-enum {
-	EDIT_MENU_SPLIT_PRESERVE = (wxID_HIGHEST + 1) + 4000,
-	EDIT_MENU_SPLIT_ESTIMATE,
-	EDIT_MENU_SPLIT_VIDEO,
-	EDIT_MENU_CUT,
-	EDIT_MENU_COPY,
-	EDIT_MENU_PASTE,
-	EDIT_MENU_SELECT_ALL,
-	EDIT_MENU_ADD_TO_DICT,
-	EDIT_MENU_REMOVE_FROM_DICT,
-	EDIT_MENU_SUGGESTION,
-	EDIT_MENU_SUGGESTIONS,
-	EDIT_MENU_THESAURUS = (wxID_HIGHEST + 1) + 5000,
-	EDIT_MENU_THESAURUS_SUGS,
-	EDIT_MENU_DIC_LANGUAGE = (wxID_HIGHEST + 1) + 6000,
-	EDIT_MENU_DIC_LANGS,
-	EDIT_MENU_THES_LANGUAGE = EDIT_MENU_DIC_LANGUAGE + LANGS_MAX,
-	EDIT_MENU_THES_LANGS
-};
-
 SubsTextEditCtrl::SubsTextEditCtrl(wxWindow* parent, wxSize wsize, long style, agi::Context *context)
 : wxStyledTextCtrl(parent, -1, wxDefaultPosition, wsize, style)
-, spellchecker(SpellCheckerFactory::GetSpellChecker())
-, thesaurus(agi::make_unique<Thesaurus>())
-, context(context)
+, SubsEditCtrlBase(context)
 {
 	osx::ime::inject(this);
 
@@ -127,20 +89,11 @@ SubsTextEditCtrl::SubsTextEditCtrl(wxWindow* parent, wxSize wsize, long style, a
 	CmdKeyClear('T',wxSTC_KEYMOD_CTRL | wxSTC_KEYMOD_SHIFT);
 	CmdKeyClear('U',wxSTC_KEYMOD_CTRL);
 
-	using std::bind;
-
 	Bind(wxEVT_CHAR_HOOK, &SubsTextEditCtrl::OnKeyDown, this);
 
-	Bind(wxEVT_MENU, bind(&SubsTextEditCtrl::Cut, this), EDIT_MENU_CUT);
-	Bind(wxEVT_MENU, bind(&SubsTextEditCtrl::Copy, this), EDIT_MENU_COPY);
-	Bind(wxEVT_MENU, bind(&SubsTextEditCtrl::Paste, this), EDIT_MENU_PASTE);
-	Bind(wxEVT_MENU, bind(&SubsTextEditCtrl::SelectAll, this), EDIT_MENU_SELECT_ALL);
-
-	if (context) {
-		Bind(wxEVT_MENU, bind(&cmd::call, "edit/line/split/preserve", context), EDIT_MENU_SPLIT_PRESERVE);
-		Bind(wxEVT_MENU, bind(&cmd::call, "edit/line/split/estimate", context), EDIT_MENU_SPLIT_ESTIMATE);
-		Bind(wxEVT_MENU, bind(&cmd::call, "edit/line/split/video", context), EDIT_MENU_SPLIT_VIDEO);
-	}
+	Bind(wxEVT_STC_UPDATEUI, &SubsTextEditCtrl::OnUpdateUI, this);
+	Bind(wxEVT_STC_MODIFIED, &SubsTextEditCtrl::OnModified, this);
+	SetModEventMask(wxSTC_MOD_INSERTTEXT | wxSTC_MOD_DELETETEXT | wxSTC_STARTACTION);
 
 	Bind(wxEVT_CONTEXT_MENU, &SubsTextEditCtrl::OnContextMenu, this);
 	Bind(wxEVT_IDLE, std::bind(&SubsTextEditCtrl::UpdateCallTip, this));
@@ -176,17 +129,8 @@ SubsTextEditCtrl::SubsTextEditCtrl(wxWindow* parent, wxSize wsize, long style, a
 	connections.push_back(OPT_SUB("Subtitle/Highlight/Syntax", &SubsTextEditCtrl::UpdateStyle, this));
 	connections.push_back(OPT_SUB("App/Call Tips", &SubsTextEditCtrl::UpdateCallTip, this));
 
-	Bind(wxEVT_MENU, [=](wxCommandEvent&) {
-		if (spellchecker) spellchecker->AddWord(currentWord);
-		UpdateStyle();
-		SetFocus();
-	}, EDIT_MENU_ADD_TO_DICT);
+	BindContextMenu();
 
-	Bind(wxEVT_MENU, [=](wxCommandEvent&) {
-		if (spellchecker) spellchecker->RemoveWord(currentWord);
-		UpdateStyle();
-		SetFocus();
-	}, EDIT_MENU_REMOVE_FROM_DICT);
 }
 
 SubsTextEditCtrl::~SubsTextEditCtrl() {
@@ -200,11 +144,6 @@ void SubsTextEditCtrl::Subscribe(std::string const& name) {
 
 BEGIN_EVENT_TABLE(SubsTextEditCtrl,wxStyledTextCtrl)
 	EVT_KILL_FOCUS(SubsTextEditCtrl::OnLoseFocus)
-
-	EVT_MENU_RANGE(EDIT_MENU_SUGGESTIONS,EDIT_MENU_THESAURUS-1,SubsTextEditCtrl::OnUseSuggestion)
-	EVT_MENU_RANGE(EDIT_MENU_THESAURUS_SUGS,EDIT_MENU_DIC_LANGUAGE-1,SubsTextEditCtrl::OnUseSuggestion)
-	EVT_MENU_RANGE(EDIT_MENU_DIC_LANGS,EDIT_MENU_THES_LANGUAGE-1,SubsTextEditCtrl::OnSetDicLanguage)
-	EVT_MENU_RANGE(EDIT_MENU_THES_LANGS,EDIT_MENU_THES_LANGS+LANGS_MAX,SubsTextEditCtrl::OnSetThesLanguage)
 END_EVENT_TABLE()
 
 void SubsTextEditCtrl::OnLoseFocus(wxFocusEvent &event) {
@@ -220,14 +159,7 @@ void SubsTextEditCtrl::OnKeyDown(wxKeyEvent &event) {
 	if (event.GetKeyCode() == WXK_TAB)
 		Navigate(event.ShiftDown() ? wxNavigationKeyEvent::IsBackward : wxNavigationKeyEvent::IsForward);
 	else if (event.GetKeyCode() == WXK_RETURN && event.GetModifiers() == wxMOD_SHIFT) {
-		auto sel_start = GetSelectionStart(), sel_end = GetSelectionEnd();
-		wxCharBuffer old = GetTextRaw();
-		std::string data(old.data(), sel_start);
-		data.append(OPT_GET("Subtitle/Edit Box/Soft Line Break")->GetBool() ? "\\n" : "\\N");
-		data.append(old.data() + sel_end, old.length() - sel_end);
-		SetTextRaw(data.c_str());
-
-		SetSelection(sel_start + 2, sel_start + 2);
+		InsertAtSelection(OPT_GET("Subtitle/Edit Box/Soft Line Break")->GetBool() ? "\\n" : "\\N");
 		event.Skip(false);
 	}
 }
@@ -291,11 +223,7 @@ void SubsTextEditCtrl::UpdateStyle() {
 	SetBidirectional(agi::util::is_rtl(line_text) ? wxSTC_BIDIRECTIONAL_R2L : wxSTC_BIDIRECTIONAL_L2R);
 #endif
 
-	AssDialogue *diag = context ? context->selectionController->GetActiveLine() : nullptr;
-	bool template_line = diag && diag->Comment && (boost::istarts_with(diag->Effect.get(), "template") || boost::istarts_with(diag->Effect.get(), "mixin"));
-
-	tokenized_line = agi::ass::TokenizeDialogueBody(line_text, template_line);
-	agi::ass::SplitWords(line_text, tokenized_line);
+	UpdateTokens();
 
 	cursor_pos = -1;
 	UpdateCallTip();
@@ -351,6 +279,20 @@ void SubsTextEditCtrl::UpdateCallTip() {
 	CallTipSetHighlight(new_calltip.highlight_start, new_calltip.highlight_end);
 }
 
+bool SubsTextEditCtrl::ProcessImeKeyEvent(wxKeyEvent &event) {
+	return osx::ime::process_key_event(this, event);
+}
+
+void SubsTextEditCtrl::OnUpdateUI(wxStyledTextEvent &event) {
+	if (on_selection_changed)
+		on_selection_changed((event.GetUpdated() & wxSTC_UPDATE_SELECTION) != 0);
+}
+
+void SubsTextEditCtrl::OnModified(wxStyledTextEvent &event) {
+	if (on_text_modified)
+		on_text_modified((event.GetModificationType() & wxSTC_STARTACTION) != 0);
+}
+
 void SubsTextEditCtrl::SetTextTo(std::string const& text) {
 	osx::ime::invalidate(this);
 	SetEvtHandlerEnabled(false);
@@ -380,21 +322,7 @@ void SubsTextEditCtrl::SetTextTo(std::string const& text) {
 }
 
 void SubsTextEditCtrl::Paste() {
-	std::string data = GetClipboard();
-
-	boost::replace_all(data, "\r\n", "\\N");
-	boost::replace_all(data, "\n", "\\N");
-	boost::replace_all(data, "\r", "\\N");
-
-	wxCharBuffer old = GetTextRaw();
-	data.insert(0, old.data(), GetSelectionStart());
-	int sel_start = data.size();
-	data.append(old.data() + GetSelectionEnd());
-
-	SetTextRaw(data.c_str());
-
-	SetSelectionStart(sel_start);
-	SetSelectionEnd(sel_start);
+	PasteClipboard();
 }
 
 void SubsTextEditCtrl::OnContextMenu(wxContextMenuEvent &event) {
@@ -405,40 +333,7 @@ void SubsTextEditCtrl::OnContextMenu(wxContextMenuEvent &event) {
 	else
 		activePos = PositionFromPoint(ScreenToClient(pos));
 
-	currentWordPos = GetBoundsOfWordAtPosition(activePos);
-	currentWord = line_text.substr(currentWordPos.first, currentWordPos.second);
-
-	wxMenu menu;
-	if (spellchecker) {
-		AddSpellCheckerEntries(menu);
-
-		// Append language list
-		menu.Append(-1, _("Spell checker language"), GetLanguagesMenu(
-			EDIT_MENU_DIC_LANGS,
-			to_wx(OPT_GET("Tool/Spell Checker/Language")->GetString()),
-			to_wx(spellchecker->GetLanguageList())));
-		menu.AppendSeparator();
-	}
-
-	AddThesaurusEntries(menu);
-
-	// Standard actions
-	menu.Append(EDIT_MENU_CUT,_("Cu&t"))->Enable(GetSelectionStart()-GetSelectionEnd() != 0);
-	menu.Append(EDIT_MENU_COPY,_("&Copy"))->Enable(GetSelectionStart()-GetSelectionEnd() != 0);
-	menu.Append(EDIT_MENU_PASTE,_("&Paste"))->Enable(CanPaste());
-	menu.AppendSeparator();
-	menu.Append(EDIT_MENU_SELECT_ALL,_("Select &All"));
-
-	// Split
-	if (context) {
-		menu.AppendSeparator();
-		menu.Append(EDIT_MENU_SPLIT_PRESERVE, _("Split at cursor (preserve times)"));
-		menu.Append(EDIT_MENU_SPLIT_ESTIMATE, _("Split at cursor (estimate times)"));
-		cmd::Command *split_video = cmd::get("edit/line/split/video");
-		menu.Append(EDIT_MENU_SPLIT_VIDEO, split_video->StrMenu(context))->Enable(split_video->Validate(context));
-	}
-
-	PopupMenu(&menu);
+	ShowContextMenu(activePos);
 }
 
 void SubsTextEditCtrl::OnDoubleClick(wxStyledTextEvent &evt) {
@@ -454,163 +349,4 @@ void SubsTextEditCtrl::OnDoubleClick(wxStyledTextEvent &evt) {
 		else
 			evt.Skip();
 	}
-}
-
-void SubsTextEditCtrl::AddSpellCheckerEntries(wxMenu &menu) {
-	if (currentWord.empty()) return;
-
-	if (spellchecker->CanRemoveWord(currentWord))
-		menu.Append(EDIT_MENU_REMOVE_FROM_DICT, fmt_tl("Remove \"%s\" from dictionary", currentWord));
-
-	sugs = spellchecker->GetSuggestions(currentWord);
-	if (spellchecker->CheckWord(currentWord)) {
-		if (sugs.empty())
-			menu.Append(EDIT_MENU_SUGGESTION,_("No spell checker suggestions"))->Enable(false);
-		else {
-			auto subMenu = new wxMenu;
-			for (size_t i = 0; i < sugs.size(); ++i)
-				subMenu->Append(EDIT_MENU_SUGGESTIONS+i, to_wx(sugs[i]));
-
-			menu.Append(-1, fmt_tl("Spell checker suggestions for \"%s\"", currentWord), subMenu);
-		}
-	}
-	else {
-		if (sugs.empty())
-			menu.Append(EDIT_MENU_SUGGESTION,_("No correction suggestions"))->Enable(false);
-
-		for (size_t i = 0; i < sugs.size(); ++i)
-			menu.Append(EDIT_MENU_SUGGESTIONS+i, to_wx(sugs[i]));
-
-		// Append "add word"
-		menu.Append(EDIT_MENU_ADD_TO_DICT, fmt_tl("Add \"%s\" to dictionary", currentWord))->Enable(spellchecker->CanAddWord(currentWord));
-	}
-}
-
-void SubsTextEditCtrl::AddThesaurusEntries(wxMenu &menu) {
-	if (currentWord.empty()) return;
-
-	auto results = thesaurus->Lookup(currentWord);
-
-	thesSugs.clear();
-
-	if (results.size()) {
-		auto thesMenu = new wxMenu;
-
-		int curThesEntry = 0;
-		for (auto const& result : results) {
-			// Single word, insert directly
-			if (result.second.empty()) {
-				thesMenu->Append(EDIT_MENU_THESAURUS_SUGS+curThesEntry, to_wx(result.first));
-				thesSugs.push_back(result.first);
-				++curThesEntry;
-			}
-			// Multiple, create submenu
-			else {
-				auto subMenu = new wxMenu;
-				for (auto const& sug : result.second) {
-					subMenu->Append(EDIT_MENU_THESAURUS_SUGS+curThesEntry, to_wx(sug));
-					thesSugs.push_back(sug);
-					++curThesEntry;
-				}
-
-				thesMenu->Append(-1, to_wx(result.first), subMenu);
-			}
-		}
-
-		menu.Append(-1, fmt_tl("Thesaurus suggestions for \"%s\"", currentWord), thesMenu);
-	}
-	else
-		menu.Append(EDIT_MENU_THESAURUS,_("No thesaurus suggestions"))->Enable(false);
-
-	// Append language list
-	menu.Append(-1,_("Thesaurus language"), GetLanguagesMenu(
-		EDIT_MENU_THES_LANGS,
-		to_wx(OPT_GET("Tool/Thesaurus/Language")->GetString()),
-		to_wx(thesaurus->GetLanguageList())));
-	menu.AppendSeparator();
-}
-
-wxMenu *SubsTextEditCtrl::GetLanguagesMenu(int base_id, wxString const& curLang, wxArrayString const& langs) {
-	auto languageMenu = new wxMenu;
-	languageMenu->AppendRadioItem(base_id, _("Disable"))->Check(curLang.empty());
-
-	for (size_t i = 0; i < langs.size(); ++i)
-		languageMenu->AppendRadioItem(base_id + i + 1, LocalizedLanguageName(langs[i]))->Check(langs[i] == curLang);
-
-	return languageMenu;
-}
-
-void SubsTextEditCtrl::OnUseSuggestion(wxCommandEvent &event) {
-	std::string suggestion;
-	int sugIdx = event.GetId() - EDIT_MENU_THESAURUS_SUGS;
-	if (sugIdx >= 0)
-		suggestion = thesSugs[sugIdx];
-	else
-		suggestion = sugs[event.GetId() - EDIT_MENU_SUGGESTIONS];
-
-	size_t pos;
-	while ((pos = suggestion.rfind('(')) != std::string::npos) {
-		// If there's only one suggestion for a word it'll be in the form "(noun) word",
-		// so we need to trim the "(noun) " part
-		if (pos == 0) {
-			pos = suggestion.find(')');
-			if (pos != std::string::npos) {
-				if (pos + 1< suggestion.size() && suggestion[pos + 1] == ' ') ++pos;
-				suggestion.erase(0, pos + 1);
-			}
-			break;
-		}
-
-		// Some replacements have notes about their usage after the word in the
-		// form "word (generic term)" that we need to remove (plus the leading space)
-		suggestion.resize(pos - 1);
-	}
-
-	// line_text needs to get cleared before SetTextRaw to ensure it gets reparsed
-	std::string new_text;
-	swap(line_text, new_text);
-	SetTextRaw(new_text.replace(currentWordPos.first, currentWordPos.second, suggestion).c_str());
-
-	SetSelection(currentWordPos.first, currentWordPos.first + suggestion.size());
-	SetFocus();
-}
-
-void SubsTextEditCtrl::OnSetDicLanguage(wxCommandEvent &event) {
-	std::vector<std::string> langs = spellchecker->GetLanguageList();
-
-	int index = event.GetId() - EDIT_MENU_DIC_LANGS - 1;
-	std::string lang;
-	if (index >= 0)
-		lang = langs[index];
-
-	OPT_SET("Tool/Spell Checker/Language")->SetString(lang);
-
-	UpdateStyle();
-}
-
-void SubsTextEditCtrl::OnSetThesLanguage(wxCommandEvent &event) {
-	if (!thesaurus) return;
-
-	std::vector<std::string> langs = thesaurus->GetLanguageList();
-
-	int index = event.GetId() - EDIT_MENU_THES_LANGS - 1;
-	std::string lang;
-	if (index >= 0) lang = langs[index];
-	OPT_SET("Tool/Thesaurus/Language")->SetString(lang);
-
-	UpdateStyle();
-}
-
-std::pair<int, int> SubsTextEditCtrl::GetBoundsOfWordAtPosition(int pos) {
-	int len = 0;
-	for (auto const& tok : tokenized_line) {
-		if (len + (int)tok.length > pos) {
-			if (tok.type == agi::ass::DialogueTokenType::WORD)
-				return {len, tok.length};
-			return {0, 0};
-		}
-		len += tok.length;
-	}
-
-	return {0, 0};
 }

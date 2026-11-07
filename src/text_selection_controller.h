@@ -16,8 +16,7 @@
 
 #include <libaegisub/signal.h>
 
-class wxStyledTextCtrl;
-class wxStyledTextEvent;
+class SubsEditCtrlBase;
 
 class TextSelectionController {
 	int selection_start = 0;
@@ -29,9 +28,9 @@ class TextSelectionController {
 	int staged_selection_end = 0;
 	bool has_staged_selection = false;
 
-	wxStyledTextCtrl *ctrl = nullptr;
+	SubsEditCtrlBase *ctrl = nullptr;
 
-	void UpdateUI(wxStyledTextEvent &evt);
+	void UpdateUI(bool selection_updated);
 
 	agi::signal::Signal<> AnnounceSelectionChanged;
 
@@ -56,7 +55,7 @@ public:
 	int GetStagedSelectionEnd() const { return has_staged_selection ? staged_selection_end : selection_end; }
 	int GetStagedInsertionPoint() const { return has_staged_selection ? staged_selection_end : insertion_point; }
 
-	void SetControl(wxStyledTextCtrl *ctrl);
+	void SetControl(SubsEditCtrlBase *ctrl);
 	~TextSelectionController();
 
 	DEFINE_SIGNAL_ADDERS(AnnounceSelectionChanged, AddSelectionListener)

@@ -25,7 +25,7 @@ namespace agi { struct Context; }
 class AssDialogue;
 class AssDialogueBlock;
 class PersistLocation;
-class SubsTextEditCtrl;
+class SubsEditCtrlBase;
 class wxCheckBox;
 class wxStaticText;
 class wxStyledTextCtrl;
@@ -52,7 +52,7 @@ class DialogTranslation final : public wxDialog {
 
 	wxStaticText *line_number_display;
 	wxStyledTextCtrl *original_text;
-	SubsTextEditCtrl *translated_text;
+	SubsEditCtrlBase *translated_text;
 	wxCheckBox *seek_video;
 
 	std::unique_ptr<PersistLocation> persist;

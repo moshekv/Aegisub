@@ -34,7 +34,7 @@
 #include "options.h"
 #include "persist_location.h"
 #include "project.h"
-#include "subs_edit_ctrl.h"
+#include "subs_edit_ctrl_base.h"
 #include "selection_controller.h"
 #include "video_controller.h"
 
@@ -97,15 +97,12 @@ DialogTranslation::DialogTranslation(agi::Context *c)
 	}
 
 	{
-		translated_text = new SubsTextEditCtrl(this, wxSize(320, 80), 0, nullptr);
-		translated_text->SetWrapMode(wxSTC_WRAP_WORD);
-		translated_text->SetMarginWidth(1, 0);
-		translated_text->SetFocus();
-		translated_text->Bind(wxEVT_CHAR_HOOK, &DialogTranslation::OnKeyDown, this);
-		translated_text->CmdKeyAssign(wxSTC_KEY_RETURN, wxSTC_KEYMOD_SHIFT, wxSTC_CMD_NEWLINE);
+		translated_text = CreateSubsEditCtrl(this, wxSize(320, 80), 0, nullptr);
+		translated_text->AsWindow()->SetFocus();
+		translated_text->AsWindow()->Bind(wxEVT_CHAR_HOOK, &DialogTranslation::OnKeyDown, this);
 
 		wxSizer *translated_box = new wxStaticBoxSizer(wxVERTICAL, this, _("Translation"));
-		translated_box->Add(translated_text, 1, wxEXPAND, 0);
+		translated_box->Add(translated_text->AsWindow(), 1, wxEXPAND, 0);
 		translation_sizer->Add(translated_box, 1, wxTOP|wxEXPAND, 5);
 	}
 	main_sizer->Add(translation_sizer, 1, wxALL | wxEXPAND, 5);
@@ -268,12 +265,12 @@ void DialogTranslation::UpdateDisplay() {
 
 	if (seek_video->IsChecked()) c->videoController->JumpToTime(active_line->Start);
 
-	translated_text->ClearAll();
-	translated_text->SetFocus();
+	translated_text->SetTextTo("");
+	translated_text->AsWindow()->SetFocus();
 }
 
 void DialogTranslation::Commit(bool next) {
-	std::string new_value = translated_text->GetTextRaw().data();
+	std::string new_value = translated_text->GetTextUtf8();
 	boost::replace_all(new_value, "\r\n", "\\N");
 	boost::replace_all(new_value, "\r", "\\N");
 	boost::replace_all(new_value, "\n", "\\N");
@@ -297,7 +294,7 @@ void DialogTranslation::Commit(bool next) {
 
 void DialogTranslation::InsertOriginal() {
 	auto const& text = blocks[cur_block]->GetText();
-	translated_text->AddTextRaw(text.data(), text.size());
+	translated_text->InsertAtSelection(text);
 }
 
 void DialogTranslation::OnKeyDown(wxKeyEvent &evt) {
@@ -306,10 +303,10 @@ void DialogTranslation::OnKeyDown(wxKeyEvent &evt) {
 
 void DialogTranslation::OnPlayVideoButton(wxCommandEvent &) {
 	c->videoController->PlayLine();
-	translated_text->SetFocus();
+	translated_text->AsWindow()->SetFocus();
 }
 
 void DialogTranslation::OnPlayAudioButton(wxCommandEvent &) {
 	cmd::call("audio/play/selection", c);
-	translated_text->SetFocus();
+	translated_text->AsWindow()->SetFocus();
 }
