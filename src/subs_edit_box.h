@@ -30,6 +30,7 @@
 #include <array>
 #include <boost/container/map.hpp>
 #include <boost/flyweight/flyweight_fwd.hpp>
+#include <set>
 #include <vector>
 
 #include <wx/combobox.h>
@@ -143,6 +144,10 @@ class SubsEditBox final : public wxPanel {
 	void OnChange(bool start_of_action);
 	/// Switch to the editor selected by Subtitle/Edit Box/Right-to-Left
 	void OnEditorChanged();
+	/// Offer to make the styles of right-to-left lines detect their direction
+	void CheckRtlStyles();
+	/// Styles CheckRtlStyles already acted on in the current file
+	std::set<std::string> rtl_styles_checked;
 	SubsEditCtrlBase *MakeEditCtrl();
 	void OnKeyDown(wxKeyEvent &event);
 
