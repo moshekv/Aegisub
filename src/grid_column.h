@@ -68,7 +68,8 @@ public:
 
 	virtual wxString const& Header() const = 0;
 	virtual wxString const& Description() const = 0;
-	virtual void Paint(wxDC &dc, int x, int y, const AssDialogue *d, const agi::Context *c) const;
+	/// @param grid_width Width of the grid's drawable area, excluding the scrollbar
+	virtual void Paint(wxDC &dc, int x, int y, int grid_width, const AssDialogue *d, const agi::Context *c) const;
 
 	// Returns true if the default action should be skipped
 	virtual bool OnMouseEvent(AssDialogue *d, agi::Context *c, wxMouseEvent &event) const { return false; }

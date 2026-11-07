@@ -25,6 +25,7 @@
 #include "fold_controller.h"
 
 #include <libaegisub/character_count.h>
+#include <libaegisub/util.h>
 
 #include <wx/dc.h>
 
@@ -87,7 +88,7 @@ void GridColumn::UpdateWidth(const agi::Context *c, WidthHelper &helper) {
 		width = 10 + std::max(width, helper(Header()));
 }
 
-void GridColumn::Paint(wxDC &dc, int x, int y, const AssDialogue *d, const agi::Context *c) const {
+void GridColumn::Paint(wxDC &dc, int x, int y, int grid_width, const AssDialogue *d, const agi::Context *c) const {
 	wxString str = Value(d, c);
 	if (Centered())
 		x += (width - 6 - dc.GetTextExtent(str).GetWidth()) / 2;
@@ -376,7 +377,7 @@ public:
 		return helper(wxS("999"));
 	}
 
-	void Paint(wxDC &dc, int x, int y, const AssDialogue *d, const agi::Context *) const override {
+	void Paint(wxDC &dc, int x, int y, int grid_width, const AssDialogue *d, const agi::Context *) const override {
 		int cps = CPS(d);
 		if (cps < 0 || cps > 100) return;
 
@@ -452,6 +453,28 @@ public:
 
 	int Width(const agi::Context *c, WidthHelper &helper) const override {
 		return 5000;
+	}
+
+	void Paint(wxDC &dc, int x, int y, int grid_width, const AssDialogue *d, const agi::Context *c) const override {
+		wxString str = Value(d, c);
+		if (!agi::util::is_rtl(d->Text.get())) {
+			dc.DrawText(str, x + 4, y + 2);
+			return;
+		}
+
+		// Wrap in an embedding so that the run gets a right-to-left base
+		// direction and trailing punctuation ends up on the correct side. This
+		// affects the displayed string only and is never written back to the
+		// file. Not an isolate (RLI/PDI), which GDI on Windows draws as boxes.
+		str.Prepend(wxUniChar(0x202B)).Append(wxUniChar(0x202C)); // RLE ... PDF
+
+		// Right-align against the visible area rather than the column, as this
+		// column is always last and reports a fixed oversized width. A line too
+		// long to fit then overflows to the left, so its start stays visible as
+		// for left-to-right lines; clip it so that it doesn't draw over the
+		// columns to the left.
+		wxDCClipper clip(dc, wxRect(x, y, grid_width - x, dc.GetCharHeight() + 4));
+		dc.DrawText(str, grid_width - 4 - dc.GetTextExtent(str).GetWidth(), y + 2);
 	}
 };
 
