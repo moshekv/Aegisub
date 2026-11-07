@@ -30,6 +30,9 @@
 #include <unicode/bytestream.h>
 #include <unicode/locid.h>
 
+#include <unicode/uchar.h>
+#include <unicode/utf8.h>
+
 namespace {
 const size_t bad_pos = (size_t)-1;
 const std::pair bad_match(bad_pos, bad_pos);
@@ -194,6 +197,45 @@ void InitLocale() {
 	// older system libc++ (e.g. on macOS 13).
 	locale = std::locale(locale, std::locale::classic(), std::locale::numeric);
 	std::locale::global(locale);
+}
+
+bool is_rtl(std::string const& str) {
+	const char *data = str.c_str();
+	const int32_t len = static_cast<int32_t>(str.size());
+
+	for (int32_t i = 0; i < len; ) {
+		// Skip override blocks; an unterminated '{' comments out the rest of the line
+		if (data[i] == '{') {
+			int32_t close = i + 1;
+			while (close < len && data[close] != '}') ++close;
+			if (close == len) return false;
+			i = close + 1;
+			continue;
+		}
+
+		UChar32 c;
+		U8_NEXT(data, i, len, c);
+		if (c < 0) continue;
+
+		// Skip \N \n \h so that the escape letter isn't taken for a strong
+		// left-to-right character
+		if (c == '\\') {
+			if (i < len) U8_NEXT(data, i, len, c);
+			continue;
+		}
+
+		switch (u_charDirection(c)) {
+		case U_LEFT_TO_RIGHT:
+			return false;
+		case U_RIGHT_TO_LEFT:
+		case U_RIGHT_TO_LEFT_ARABIC:
+			return true;
+		default:
+			break;
+		}
+	}
+
+	return false;
 }
 } // namespace util
 
