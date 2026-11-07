@@ -144,6 +144,8 @@ class SubsEditBox final : public wxPanel {
 	wxRadioButton *MakeRadio(wxString const& text, bool start, wxString const& tooltip);
 
 	void OnChange(bool start_of_action);
+	/// Switch to the editor selected by Subtitle/Edit Box/Right-to-Left
+	void OnEditorChanged();
 	SubsEditCtrlBase *MakeEditCtrl();
 	void OnKeyDown(wxKeyEvent &event);
 
