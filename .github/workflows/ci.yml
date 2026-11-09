@@ -163,6 +163,8 @@ jobs:
 
       - name: Configure
         run: |
+          # BestSource's libp2p submodule was removed from Bitbucket; the same commits are on GitHub
+          git config --global url.https://github.com/sekrit-twc/libp2p.insteadOf https://bitbucket.org/the-sekrit-twc/libp2p
           meson setup build ${{ matrix.config.args }} -Dbuildtype=${{ matrix.config.buildtype }}
           meson configure build
 
