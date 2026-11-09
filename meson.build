@@ -155,7 +155,8 @@ else
         'wxUSE_REGEX': 'builtin',
         'CMAKE_BUILD_TYPE': build_type,
         'wxUSE_IMAGE': true,
-        'wxBUILD_MONOLITHIC': true      # otherwise breaks project generation w/ meson
+        'wxBUILD_MONOLITHIC': true,     # otherwise breaks project generation w/ meson
+        'CMAKE_POLICY_VERSION_MINIMUM': '3.5', # CMake 4 rejects wx 3.1.4's minimum of 2.8.12
     })
 
     if get_option('wx_version').version_compare('>=3.3.0')
