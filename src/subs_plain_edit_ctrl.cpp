@@ -35,6 +35,10 @@
 #include <richedit.h>
 #endif
 
+#if defined(__WXGTK3__) && __has_include(<gtk/gtk.h>)
+#include <gtk/gtk.h>
+#endif
+
 namespace {
 // GTK and macOS take a paragraph's base direction from its first strong
 // character and ignore the widget's direction. For most lines that is a letter
@@ -365,6 +369,14 @@ void SubsPlainTextEditCtrl::SetStyles() {
 	// the theme and can match the background (light text in a dark theme)
 	wxColour normal = to_wx(OPT_GET("Colour/Subtitle/Syntax/Normal")->GetColor());
 	SetForegroundColour(normal);
+#ifdef GTK_MAJOR_VERSION
+	// wx before 3.1 doesn't pass the foreground colour on to the caret, which
+	// then keeps the theme's colour. One provider serves every instance, as
+	// the colour comes from a global option.
+	static GtkCssProvider *caret_css = gtk_css_provider_new();
+	gtk_css_provider_load_from_data(caret_css, wxString::Format("*{caret-color:%s}", normal.GetAsString(wxC2S_CSS_SYNTAX)).utf8_str(), -1, nullptr);
+	gtk_style_context_add_provider(gtk_widget_get_style_context(GetConnectWidget()), GTK_STYLE_PROVIDER(caret_css), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+#endif
 
 	wxTextAttr attr;
 	attr.SetFont(font);

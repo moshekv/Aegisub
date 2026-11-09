@@ -134,6 +134,8 @@ wx_dep = dependency('wxWidgets', version: wx_minver,
 
 if wx_dep.found()
     deps += wx_dep
+    # The native editor sets its caret colour through GTK, which wx before 3.1 doesn't do
+    deps += dependency('gtk+-3.0', required: false)
 else
     build_shared = true
     if get_option('default_library') == 'static'
