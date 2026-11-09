@@ -83,6 +83,8 @@ if (!(Test-Path BestSource)) {
 	Invoke-WebRequest $bsUrl -OutFile bestsource.7z -UseBasicParsing
 	7z x bestsource.7z
 	Remove-Item bestsource.7z
+	# Newer releases name it after the version and build, e.g. BestSource-R23-win64-msvc.dll
+	Get-ChildItem *.dll -Exclude BestSource.dll | Rename-Item -NewName BestSource.dll
 	Set-Location $DepsDir
 }
 
