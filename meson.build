@@ -124,6 +124,11 @@ endif
 
 deps += dependency('zlib')
 
+if host_machine.system() not in ['windows', 'darwin']
+    # The native editor sets its caret colour through GTK, which wx before 3.1 doesn't do
+    deps += dependency('gtk+-3.0', required: false)
+endif
+
 wx_minver = '>=' + get_option('wx_version')
 if host_machine.system() == 'darwin'
     wx_minver = '>=3.1.0'
@@ -134,8 +139,6 @@ wx_dep = dependency('wxWidgets', version: wx_minver,
 
 if wx_dep.found()
     deps += wx_dep
-    # The native editor sets its caret colour through GTK, which wx before 3.1 doesn't do
-    deps += dependency('gtk+-3.0', required: false)
 else
     build_shared = true
     if get_option('default_library') == 'static'
