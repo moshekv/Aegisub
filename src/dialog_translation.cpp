@@ -257,6 +257,7 @@ void DialogTranslation::UpdateDisplay() {
 	}
 
 	original_text->SetReadOnly(true);
+	SetBidiDirection(original_text, active_line->Text.get());
 
 	if (seek_video->IsChecked()) c->videoController->JumpToTime(active_line->Start);
 
