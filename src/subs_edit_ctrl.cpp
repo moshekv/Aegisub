@@ -45,6 +45,7 @@
 #include <libaegisub/calltip_provider.h>
 #include <libaegisub/character_count.h>
 #include <libaegisub/spellchecker.h>
+#include <libaegisub/util.h>
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/algorithm/string/replace.hpp>
@@ -80,6 +81,43 @@ enum {
 	EDIT_MENU_THES_LANGUAGE = EDIT_MENU_DIC_LANGUAGE + LANGS_MAX,
 	EDIT_MENU_THES_LANGS
 };
+
+namespace {
+// Scintilla's provisional messages for its bidirectional mode, which
+// wxStyledTextCtrl doesn't wrap
+constexpr int SCI_GETBIDIRECTIONAL = 2708;
+constexpr int SCI_SETBIDIRECTIONAL = 2709;
+constexpr int SC_BIDIRECTIONAL_DISABLED = 0;
+constexpr int SC_BIDIRECTIONAL_L2R = 1;
+}
+
+void SetBidiDirection(wxStyledTextCtrl *ctrl, std::string const& text) {
+	// Without the bidirectional mode, Scintilla places the caret, mouse clicks
+	// and selections as if all text were left-to-right. wxStyledTextCtrl only
+	// supports the mode with DirectWrite under MSW, in wxWidgets versions that
+	// implement it, and ignores the messages everywhere else. Whether it does
+	// depends only on the wxWidgets build, so it is checked once.
+	static bool unsupported = false;
+
+	// DirectWrite changes how all text is drawn, so only switch to it once
+	// there is right-to-left text to lay out, and then keep it
+	if (unsupported || !agi::util::is_rtl(text)
+		|| ctrl->SendMsg(SCI_GETBIDIRECTIONAL) != SC_BIDIRECTIONAL_DISABLED)
+		return;
+
+	// Scintilla only fully implements the mode with a left-to-right base
+	// direction, which still lays out right-to-left runs right-to-left
+	ctrl->SetTechnology(wxSTC_TECHNOLOGY_DIRECTWRITE);
+	ctrl->SendMsg(SCI_SETBIDIRECTIONAL, SC_BIDIRECTIONAL_L2R);
+	if (ctrl->SendMsg(SCI_GETBIDIRECTIONAL) != SC_BIDIRECTIONAL_L2R) {
+		ctrl->SetTechnology(wxSTC_TECHNOLOGY_DEFAULT);
+		unsupported = true;
+		return;
+	}
+
+	// The selection's own text colour garbles selected right-to-left runs
+	ctrl->SetSelForeground(false, wxColour());
+}
 
 SubsTextEditCtrl::SubsTextEditCtrl(wxWindow* parent, wxSize wsize, long style, agi::Context *context)
 : wxStyledTextCtrl(parent, -1, wxDefaultPosition, wsize, style)
@@ -281,6 +319,10 @@ void SubsTextEditCtrl::UpdateStyle() {
 
 	tokenized_line = agi::ass::TokenizeDialogueBody(line_text, template_line);
 	agi::ass::SplitWords(line_text, tokenized_line);
+
+	// Here rather than when the line changes, so that typing or pasting a
+	// different first strong character also changes the direction
+	SetBidiDirection(this, line_text);
 
 	cursor_pos = -1;
 	UpdateCallTip();
