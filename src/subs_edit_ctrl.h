@@ -124,3 +124,9 @@ public:
 
 	DECLARE_EVENT_TABLE()
 };
+
+/// Turn on Scintilla's bidirectional mode in ctrl once it shows right-to-left
+/// text, where wxStyledTextCtrl supports it, so that the caret, mouse and
+/// selection work in right-to-left and mixed-direction text. Does nothing
+/// where it doesn't.
+void SetBidiDirection(wxStyledTextCtrl *ctrl, std::string const& text);
