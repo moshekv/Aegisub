@@ -103,6 +103,10 @@ class AudioKaraoke final : public wxWindow, private agi::signal::ConnectionScope
 	std::unordered_map<std::string, int, StringHash, std::equal_to<>> char_widths;
 
 	int scroll_x = 0; ///< Distance the display has been shifted to the left in pixels
+
+	/// Whether the line is drawn right-to-left. char_x, syl_lines and mouse
+	/// positions stay left-to-right, and are mirrored when drawing and on input.
+	bool rtl = false;
 	int scroll_dir = 0; ///< Direction the display will be scrolled on scroll_timer ticks (+/- 1)
 	wxTimer scroll_timer; ///< Timer to scroll every 50ms when user holds down scroll button
 
