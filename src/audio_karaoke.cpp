@@ -33,6 +33,7 @@
 
 #include <libaegisub/ass/karaoke.h>
 #include <libaegisub/unicode.h>
+#include <libaegisub/util.h>
 
 #include <algorithm>
 #include <wx/bmpbuttn.h>
@@ -211,15 +212,23 @@ void AudioKaraoke::RenderText() {
 	dc.SetFont(split_font);
 	dc.SetTextForeground(wxColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT)));
 
-	// Draw each character in the line
+	// Draw each character in the line. Right-to-left lines start at the right
+	// edge, with each character still drawn the right way round.
+	const int bmp_width = bmp_size.GetWidth();
 	int y = (bmp_size.GetHeight() - char_height) / 2;
-	for (size_t i = 0; i < spaced_text.size(); ++i)
-		dc.DrawText(spaced_text[i], char_x[i], y);
+	for (size_t i = 0; i < spaced_text.size(); ++i) {
+		int x = char_x[i];
+		if (rtl)
+			x = bmp_width - x - dc.GetTextExtent(spaced_text[i]).GetWidth();
+		dc.DrawText(spaced_text[i], x, y);
+	}
 
 	// Draw the lines between each syllable
 	dc.SetPen(wxSystemSettings::GetColour(wxSYS_COLOUR_HIGHLIGHT));
-	for (auto syl_line : syl_lines)
-		dc.DrawLine(syl_line, 0, syl_line, bmp_size.GetHeight());
+	for (auto syl_line : syl_lines) {
+		int x = rtl ? bmp_width - syl_line : syl_line;
+		dc.DrawLine(x, 0, x, bmp_size.GetHeight());
+	}
 }
 
 void AudioKaraoke::AddMenuItem(wxMenu &menu, std::string_view tag, wxString const& help, std::string_view selected) {
@@ -281,6 +290,8 @@ void AudioKaraoke::OnMouse(wxMouseEvent &event) {
 	}
 
 	int shifted_pos = mouse_pos + scroll_x;
+	if (rtl)
+		shifted_pos = rendered_line.GetWidth() - shifted_pos;
 
 	// Character to insert the new split point before
 	int split_pos = std::min<int>((shifted_pos + char_width / 2) / char_width, spaced_text.size());
@@ -332,11 +343,18 @@ void AudioKaraoke::LoadFromLine() {
 	scroll_timer.Stop();
 	SetKaraokeLine(*kara, active_line, true);
 	SetDisplayText();
+
+	// Show the start of a long right-to-left line, which is at the right end
+	int client_width = split_area->GetClientSize().GetWidth();
+	if (rtl && rendered_line.GetWidth() > client_width)
+		scroll_x = rendered_line.GetWidth() + 20 - client_width;
 	accept_button->Enable(kara->GetText() != active_line->Text);
 	cancel_button->Enable(false);
 }
 
 void AudioKaraoke::SetDisplayText() {
+	rtl = agi::util::is_rtl(kara->GetText());
+
 	wxMemoryDC dc;
 	dc.SetFont(split_font);
 
