@@ -69,12 +69,37 @@
 #include <wx/sizer.h>
 #include <wx/spinctrl.h>
 
+#ifdef __WXMSW__
+#include <wx/msw/wrapwin.h>
+#include <richedit.h>
+#endif
+
 namespace {
 
 /// Work around wxGTK's fondness for generating events from ChangeValue
 void change_value(wxTextCtrl *ctrl, wxString const& value) {
 	if (value != ctrl->GetValue())
 		ctrl->ChangeValue(value);
+}
+
+/// Show a line in a read-only text control in the line's base direction
+void set_directional_value(wxTextCtrl *ctrl, std::string const& text) {
+	// Text controls take the paragraph direction from the first strong
+	// character, which can be a letter of an override tag, so start with a
+	// mark of the line's direction. It is only displayed, never saved.
+	const bool rtl = agi::util::is_rtl(text);
+	ctrl->SetValue(wxString(rtl ? wxUniChar(0x200F) : wxUniChar(0x200E)) + to_wx(text));
+#ifdef __WXMSW__
+	// The rich edit control keeps a paragraph direction of its own instead,
+	// and keeps it when the text is replaced, so set it both ways
+	PARAFORMAT2 pf{};
+	pf.cbSize = sizeof(pf);
+	pf.dwMask = PFM_RTLPARA;
+	pf.wEffects = rtl ? PFE_RTLPARA : 0;
+	ctrl->SetSelection(-1, -1);
+	::SendMessage(static_cast<HWND>(ctrl->GetHWND()), EM_SETPARAFORMAT, 0, reinterpret_cast<LPARAM>(&pf));
+	ctrl->SetSelection(0, 0);
+#endif
 }
 
 wxString new_value([[maybe_unused]] wxComboBox *ctrl, [[maybe_unused]] wxCommandEvent &evt) {
@@ -201,7 +226,7 @@ SubsEditBox::SubsEditBox(wxWindow *parent, agi::Context *context)
 	edit_ctrl = new SubsTextEditCtrl(this, FromDIP(wxSize(300,50)), wxBORDER_SUNKEN, c);
 	edit_ctrl->Bind(wxEVT_CHAR_HOOK, &SubsEditBox::OnKeyDown, this);
 
-	secondary_editor = new wxTextCtrl(this, -1, "", wxDefaultPosition, FromDIP(wxSize(300,50)), wxBORDER_SUNKEN | wxTE_MULTILINE | wxTE_READONLY);
+	secondary_editor = new wxTextCtrl(this, -1, "", wxDefaultPosition, FromDIP(wxSize(300,50)), wxBORDER_SUNKEN | wxTE_MULTILINE | wxTE_READONLY | wxTE_RICH2);
 
 	main_sizer->Add(secondary_editor,1,wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM,3);
 	main_sizer->Add(edit_ctrl,1,wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM,3);
@@ -417,7 +442,7 @@ void SubsEditBox::OnSelectedSetChanged() {
 
 void SubsEditBox::OnLineInitialTextChanged(std::string const& new_text) {
 	if (split_box->IsChecked())
-		secondary_editor->SetValue(to_wx(new_text));
+		set_directional_value(secondary_editor, new_text);
 }
 
 void SubsEditBox::UpdateFrameTiming(agi::vfr::Framerate const& fps) {
@@ -590,7 +615,7 @@ void SubsEditBox::OnSplit(wxCommandEvent&) {
 void SubsEditBox::DoOnSplit(bool show_original) {
 	Freeze();
 	if (show_original)
-		secondary_editor->SetValue(to_wx(c->initialLineState->GetInitialText()));
+		set_directional_value(secondary_editor, c->initialLineState->GetInitialText());
 
 	GetSizer()->Show(secondary_editor, show_original);
 	GetSizer()->Show(bottom_sizer, show_original);
