@@ -24,8 +24,17 @@
 #include "video_provider_manager.h"
 
 #include <libaegisub/dispatch.h>
+#include <libaegisub/util.h>
 
 #include <boost/gil.hpp>
+
+namespace {
+/// Show right-to-left lines as saved
+void prepare_rtl(AssFile *subs) {
+	for (auto& line : subs->Events)
+		line.Text = agi::util::add_rtl_marks(line.Text);
+}
+}
 
 enum {
 	NEW_SUBS_FILE = -1,
@@ -68,6 +77,7 @@ std::shared_ptr<VideoFrame> AsyncVideoProvider::ProcFrame(int frame_number, doub
 			}
 			else {
 				AssFixStylesFilter::ProcessSubs(subs.get());
+				prepare_rtl(subs.get());
 				single_frame = frame_number;
 				subs_provider->LoadSubtitles(subs.get(), time);
 			}
@@ -103,6 +113,8 @@ VideoFrame AsyncVideoProvider::GetSubtitles(double time) {
 	if (!subs) return frame_black;
 	VideoFrame frame_white = GetBlankFrame(true);
 
+	// The file may not have been prepared for a frame yet since it changed
+	prepare_rtl(subs.get());
 	subs_provider->LoadSubtitles(subs.get());
 	subs_provider->DrawSubtitles(frame_black, time / 1000.);
 	subs_provider->DrawSubtitles(frame_white, time / 1000.);

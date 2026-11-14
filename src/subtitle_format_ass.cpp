@@ -30,6 +30,7 @@
 #include <libaegisub/ass/string_codec.h>
 #include <libaegisub/ass/uuencode.h>
 #include <libaegisub/fs.h>
+#include <libaegisub/util.h>
 
 DEFINE_EXCEPTION(AssParseError, SubtitleFormatParseError);
 
@@ -83,8 +84,23 @@ struct Writer {
 				group = line.Group();
 			}
 
-			file.WriteLineToFile(line.GetEntryData());
+			file.WriteLineToFile(EntryData(line));
 		}
+	}
+
+	template<typename T>
+	static std::string EntryData(T const& line) { return line.GetEntryData(); }
+
+	// Right-to-left marks make VSFilter, and libass with styles of any
+	// encoding but -1, show right-to-left lines right; renderers which lay
+	// them out right-to-left already show them the same. They are removed
+	// again when loading.
+	static std::string EntryData(AssDialogue const& line) {
+		auto text = agi::util::add_rtl_marks(line.Text);
+		if (text == line.Text.get()) return line.GetEntryData();
+		AssDialogue marked(line);
+		marked.Text = text;
+		return marked.GetEntryData();
 	}
 
 	void Write(ProjectProperties const& properties) {

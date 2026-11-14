@@ -266,6 +266,61 @@ bool is_rtl(std::string const& str) {
 
 	return false;
 }
+
+namespace {
+const char rle[] = "\xE2\x80\xAB";                 // U+202B RIGHT-TO-LEFT EMBEDDING
+const char rlm_pdf[] = "\xE2\x80\x8F\xE2\x80\xAC"; // U+200F RIGHT-TO-LEFT MARK, U+202C POP DIRECTIONAL FORMATTING
+constexpr auto npos = std::string::npos;
+
+std::string embed_if_rtl(std::string const& text) {
+	return is_rtl(text) ? rle + text + rlm_pdf : text;
+}
+
+/// Where the text after the override blocks at the start of a line begins,
+/// or npos if one of them is unterminated
+size_t text_start(std::string const& text) {
+	size_t start = 0;
+	while (start < text.size() && text[start] == '{') {
+		size_t close = text.find('}', start);
+		if (close == npos) return npos;
+		start = close + 1;
+	}
+	return start;
+}
+
+/// Apply f to each \N part of the text after start
+template<typename Func>
+std::string map_parts(std::string const& text, size_t start, Func f) {
+	std::string out = text.substr(0, start);
+	for (;;) {
+		size_t end = text.find("\\N", start);
+		out += f(text.substr(start, end == npos ? npos : end - start));
+		if (end == npos) return out;
+		out += "\\N";
+		start = end + 2;
+	}
+}
+}
+
+std::string add_rtl_marks(std::string const& text) {
+	size_t start = text_start(text);
+	if (start == npos || text.find(rle) != npos || text.find('{', start) != npos) return text;
+	return map_parts(text, start, embed_if_rtl);
+}
+
+std::string remove_rtl_marks(std::string const& text) {
+	size_t start = text_start(text);
+	if (start == npos || text.find(rle) == npos || text.find('{', start) != npos) return text;
+	return map_parts(text, start, [](std::string part) {
+		constexpr size_t rle_len = sizeof(rle) - 1, rlm_pdf_len = sizeof(rlm_pdf) - 1;
+		if (part.size() >= rle_len + rlm_pdf_len && part.starts_with(rle) && part.ends_with(rlm_pdf)) {
+			// Only marks that add_rtl_marks would add back
+			auto inner = part.substr(rle_len, part.size() - rle_len - rlm_pdf_len);
+			if (is_rtl(inner)) return inner;
+		}
+		return part;
+	});
+}
 } // namespace util
 
 #ifndef __APPLE__
