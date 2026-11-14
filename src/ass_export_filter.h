@@ -65,6 +65,9 @@ public:
 	std::string const& GetName() const { return name; }
 	std::string const& GetDescription() const { return description; }
 
+	/// Should the filter only be run when exporting to ASS or SSA?
+	virtual bool AssOnly() const { return false; }
+
 	/// Process subtitles
 	/// @param subs Subtitles to process
 	/// @param parent_window Window to use as the parent if the filter wishes

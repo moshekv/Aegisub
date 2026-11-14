@@ -81,6 +81,18 @@ namespace agi::util {
 	///         that renderers lay out on their own
 	std::string add_rtl_marks(std::string const& text);
 
+	/// Store the style runs between the override tags of the right-to-left \N
+	/// parts of a line last to first, as VSFilter, and libass unless the
+	/// style's encoding is -1, place them left-to-right. Each run is embedded
+	/// as by add_rtl_marks with all the tags in effect for it, karaoke
+	/// syllables get their start time with \kt so that they still play in
+	/// order, and \q2 keeps the line from being wrapped in the wrong place.
+	/// @param text Dialogue line text
+	/// @return The reordered text, or unchanged if there was nothing to reorder,
+	///         or it has drawings, \fsp, \fe-1 which libass lays out itself,
+	///         or \n which \q2 would make a hard line break
+	std::string reorder_rtl_runs(std::string const& text);
+
 	/// Undo add_rtl_marks, so that marks added when saving aren't in the way
 	/// when editing
 	/// @param text Dialogue line text

@@ -44,6 +44,7 @@
 #include "dialogs.h"
 #include "export_fixstyle.h"
 #include "export_framerate.h"
+#include "export_rtl.h"
 #include "format.h"
 #include "frame_main.h"
 #include "include/aegisub/context.h"
@@ -315,6 +316,7 @@ bool AegisubApp::OnInit() {
 		StartupLog("Register export filters");
 		AssExportFilterChain::Register(std::make_unique<AssFixStylesFilter>());
 		AssExportFilterChain::Register(std::make_unique<AssTransformFramerateFilter>());
+		AssExportFilterChain::Register(std::make_unique<AssRtlOrderFilter>());
 
 		StartupLog("Install PNG handler");
 		wxImage::AddHandler(new wxPNGHandler);

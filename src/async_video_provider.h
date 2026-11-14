@@ -56,6 +56,10 @@ class AsyncVideoProvider {
 	/// Copy of the subtitles file to avoid having to touch the project context
 	std::unique_ptr<AssFile> subs;
 
+	/// Should the style runs of right-to-left lines be reordered as on export?
+	/// The copy of the file doesn't carry the project properties which say so.
+	bool reorder_rtl = false;
+
 	/// If >= 0, the subtitles provider current has just the lines visible on
 	/// that frame loaded. If -1, the entire file is loaded. If -2, the
 	/// currently loaded file is out of date.

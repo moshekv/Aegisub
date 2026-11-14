@@ -19,6 +19,7 @@
 #include "ass_dialogue.h"
 #include "ass_file.h"
 #include "export_fixstyle.h"
+#include "export_rtl.h"
 #include "include/aegisub/subtitles_provider.h"
 #include "video_frame.h"
 #include "video_provider_manager.h"
@@ -29,8 +30,10 @@
 #include <boost/gil.hpp>
 
 namespace {
-/// Show right-to-left lines as saved
-void prepare_rtl(AssFile *subs) {
+/// Show right-to-left lines as saved, or exported with the word order filter
+void prepare_rtl(AssFile *subs, bool reorder) {
+	if (reorder)
+		AssRtlOrderFilter::ProcessSubs(subs);
 	for (auto& line : subs->Events)
 		line.Text = agi::util::add_rtl_marks(line.Text);
 }
@@ -77,7 +80,7 @@ std::shared_ptr<VideoFrame> AsyncVideoProvider::ProcFrame(int frame_number, doub
 			}
 			else {
 				AssFixStylesFilter::ProcessSubs(subs.get());
-				prepare_rtl(subs.get());
+				prepare_rtl(subs.get(), reorder_rtl);
 				single_frame = frame_number;
 				subs_provider->LoadSubtitles(subs.get(), time);
 			}
@@ -119,7 +122,7 @@ VideoFrame AsyncVideoProvider::GetSubtitles(double time) {
 		if (!subs) return;
 		has_subs = true;
 		// The file may not have been prepared for a frame yet since it changed
-		prepare_rtl(subs.get());
+		prepare_rtl(subs.get(), reorder_rtl);
 		subs_provider->LoadSubtitles(subs.get());
 		subs_provider->DrawSubtitles(frame_black, time / 1000.);
 		subs_provider->DrawSubtitles(frame_white, time / 1000.);
@@ -193,8 +196,10 @@ void AsyncVideoProvider::LoadSubtitles(const AssFile *new_subs) throw() {
 	uint_fast32_t req_version = ++version;
 
 	auto copy = new AssFile(*new_subs);
+	bool reorder = AssRtlOrderFilter::IsSelected(*new_subs);
 	worker->Async([=, this]{
 		subs.reset(copy);
+		reorder_rtl = reorder;
 		single_frame = NEW_SUBS_FILE;
 		ProcAsync(req_version, false);
 	});

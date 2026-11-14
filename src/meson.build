@@ -87,6 +87,7 @@ aegisub_src = files(
     'dialog_video_properties.cpp',
     'export_fixstyle.cpp',
     'export_framerate.cpp',
+    'export_rtl.cpp',
     'fft.cpp',
     'font_file_lister.cpp',
     'frame_main.cpp',

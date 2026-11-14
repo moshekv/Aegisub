@@ -23,6 +23,8 @@
 #include <boost/locale/conversion.hpp>
 #include <boost/locale/util.hpp>
 #include <boost/range/distance.hpp>
+#include <algorithm>
+#include <cstdlib>
 #include <ctime>
 #include <sstream>
 #include <thread>
@@ -300,12 +302,161 @@ std::string map_parts(std::string const& text, size_t start, Func f) {
 		start = end + 2;
 	}
 }
+
+/// Is tag (without its backslash) the override tag name, followed by its value?
+bool tag_is(std::string_view tag, std::string_view name) {
+	if (tag.substr(0, name.size()) != name) return false;
+	if (tag.size() == name.size()) return true;
+	char c = tag[name.size()];
+	return (c >= '0' && c <= '9') || c == '-' || c == '(';
+}
+
+int tag_value(std::string_view tag, std::string_view name) {
+	return std::atoi(std::string(tag.substr(name.size())).c_str());
+}
+
+/// Split the inside of an override block into tags, keeping \t(\...) whole
+std::vector<std::string_view> split_tags(std::string_view block) {
+	std::vector<std::string_view> tags;
+	size_t begin = npos;
+	int depth = 0;
+	for (size_t i = 0; i < block.size(); ++i) {
+		if (block[i] == '(') ++depth;
+		else if (block[i] == ')' && depth) --depth;
+		else if (block[i] == '\\' && !depth) {
+			if (begin != npos && i > begin) tags.push_back(block.substr(begin, i - begin));
+			begin = i + 1;
+		}
+	}
+	if (begin != npos && begin < block.size()) tags.push_back(block.substr(begin));
+	return tags;
+}
+
+struct Run {
+	std::string style; ///< Every style override tag in effect, in order
+	std::string kara;  ///< \kt and \k tags of the karaoke syllable the run is in
+	std::string text;
+};
+
+/// Store the style runs of right-to-left lines last to first, as renderers
+/// place runs left-to-right whatever the marks inside them say. Karaoke
+/// syllables get their start time with \kt so that they still play in order.
+std::string reorder_runs(std::string const& text) {
+	std::string globals, style, syllable;
+	bool restyled = false, karaoke = false;
+	int ktime = 0;
+	std::vector<std::vector<Run>> parts(1);
+
+	for (size_t i = 0; i < text.size(); ) {
+		if (text[i] == '{') {
+			size_t close = text.find('}', i);
+			if (close == npos) return text;
+			for (auto tag : split_tags(std::string_view(text).substr(i + 1, close - i - 1))) {
+				// Drawings and per-letter spacing can't be helped, and \fe-1
+				// already makes libass lay the line out right-to-left
+				if ((tag_is(tag, "p") && tag_value(tag, "p")) || (tag_is(tag, "fsp") && tag_value(tag, "fsp"))
+					|| (tag_is(tag, "fe") && tag_value(tag, "fe") == -1))
+					return text;
+
+				std::string_view kname;
+				for (std::string_view name : {"kf", "ko", "kt", "k", "K"}) {
+					if (tag_is(tag, name)) { kname = name; break; }
+				}
+				if (kname == "kt")
+					ktime = tag_value(tag, kname);
+				else if (!kname.empty()) {
+					int duration = tag_value(tag, kname);
+					syllable = "\\kt" + std::to_string(ktime) + "\\" + std::string(kname) + std::to_string(duration);
+					ktime += duration;
+					karaoke = true;
+				}
+				else if (tag_is(tag, "pos") || tag_is(tag, "move") || tag_is(tag, "org") || tag_is(tag, "clip")
+					|| tag_is(tag, "iclip") || tag_is(tag, "fad") || tag_is(tag, "fade") || tag_is(tag, "an")
+					|| tag_is(tag, "a") || tag_is(tag, "q"))
+					globals += "\\" + std::string(tag);
+				else {
+					style += "\\" + std::string(tag);
+					restyled = true;
+				}
+			}
+			i = close + 1;
+			continue;
+		}
+
+		size_t end = std::min(text.find('{', i), text.size());
+		for (;;) {
+			size_t brk = std::min(text.find("\\N", i), end);
+			parts.back().push_back({style, syllable, text.substr(i, brk - i)});
+			if (brk == end) break;
+			parts.emplace_back();
+			i = brk + 2;
+		}
+		i = end;
+	}
+
+	auto block = [&](Run const& run) {
+		std::string tags;
+		if (restyled) tags = "\\r" + run.style;
+		// Text before the first syllable must not join the syllable before it
+		if (karaoke) tags += run.kara.empty() ? "\\kt0\\k0" : run.kara;
+		return tags.empty() ? tags : "{" + tags + "}";
+	};
+	auto lead_end = [](std::string const& s) { return std::min(s.find_first_not_of(' '), s.size()); };
+	auto trail_begin = [](std::string const& s) { size_t e = s.find_last_not_of(' '); return e == npos ? s.size() : e + 1; };
+
+	std::string body;
+	bool any_rtl = false, reversed = false;
+	for (auto& runs : parts) {
+		if (&runs != &parts.front()) body += "\\N";
+		runs.erase(std::remove_if(runs.begin(), runs.end(), [](Run const& r) { return r.text.empty(); }), runs.end());
+		std::string plain;
+		for (auto const& run : runs) plain += run.text;
+		bool rtl = is_rtl(plain);
+		any_rtl |= rtl;
+
+		if (runs.size() < 2 || !rtl || !(restyled || karaoke)) {
+			if (runs.size() == 1 || !(restyled || karaoke)) {
+				if (!runs.empty()) body += block(runs[0]) + embed_if_rtl(plain);
+			}
+			else {
+				for (auto const& run : runs) body += block(run) + run.text;
+			}
+			continue;
+		}
+
+		// Reverse the runs, embedding each, with the spaces between them
+		// outside the embeddings so that they stay between the runs
+		reversed = true;
+		body += runs.back().text.substr(trail_begin(runs.back().text));
+		for (size_t j = runs.size(); j-- > 0; ) {
+			auto const& s = runs[j].text;
+			size_t b = lead_end(s), e = std::max(trail_begin(s), b);
+			body += block(runs[j]);
+			if (e > b) body += rle + s.substr(b, e - b) + rlm_pdf;
+			if (j > 0) body += s.substr(0, b) + runs[j - 1].text.substr(trail_begin(runs[j - 1].text));
+		}
+		body += runs.front().text.substr(0, lead_end(runs.front().text));
+	}
+
+	if (!any_rtl) return text;
+	// Wrapping would break reversed lines in the wrong place
+	if (reversed) globals += "\\q2";
+	return (globals.empty() ? "" : "{" + globals + "}") + body;
+}
 }
 
 std::string add_rtl_marks(std::string const& text) {
 	size_t start = text_start(text);
 	if (start == npos || text.find(rle) != npos || text.find('{', start) != npos) return text;
 	return map_parts(text, start, embed_if_rtl);
+}
+
+std::string reorder_rtl_runs(std::string const& text) {
+	size_t start = text_start(text);
+	// \q2 would turn soft line breaks into hard ones
+	if (start == npos || text.find(rle) != npos || text.find('{', start) == npos || text.find("\\n") != npos)
+		return text;
+	return reorder_runs(text);
 }
 
 std::string remove_rtl_marks(std::string const& text) {
