@@ -69,6 +69,24 @@ namespace agi::util {
 	///         override blocks and \N \n \h escapes. False if there is none.
 	bool is_rtl(std::string const& str);
 
+	/// Wrap each right-to-left \N-separated part of a line in U+202B ... U+200F
+	/// U+202C. VSFilter, and libass unless the style's encoding is -1, lay
+	/// lines out left-to-right, which puts the punctuation, numbers and Latin
+	/// words of right-to-left lines in the wrong place; with the marks they get
+	/// them right, while renderers that lay the lines out right-to-left show
+	/// them the same either way.
+	/// @param text Dialogue line text
+	/// @return The text with marks added, or unchanged if it already has marks
+	///         or has override blocks after its start, which start style runs
+	///         that renderers lay out on their own
+	std::string add_rtl_marks(std::string const& text);
+
+	/// Undo add_rtl_marks, so that marks added when saving aren't in the way
+	/// when editing
+	/// @param text Dialogue line text
+	/// @return The text without the marks
+	std::string remove_rtl_marks(std::string const& text);
+
 	/// Set the name of the calling thread in the Visual Studio debugger
 	/// @param name New name for the thread
 	void SetThreadName(const char *name);

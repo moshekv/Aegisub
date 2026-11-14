@@ -108,4 +108,43 @@ TEST(lagi_util, is_rtl) {
 	EXPECT_FALSE(util::is_rtl("Hello \u05e9\u05dc\u05d5\u05dd"));
 }
 
+#define RLE "\u202b"
+#define RLM_PDF "\u200f\u202c"
+#define SHALOM "\u05e9\u05dc\u05d5\u05dd"
+#define OLAM "\u05e2\u05d5\u05dc\u05dd"
+
+TEST(lagi_util, add_rtl_marks) {
+	EXPECT_EQ(RLE SHALOM "!" RLM_PDF, util::add_rtl_marks(SHALOM "!"));
+
+	// Leading override blocks stay first
+	EXPECT_EQ("{\\an8}{\\i1}" RLE SHALOM RLM_PDF, util::add_rtl_marks("{\\an8}{\\i1}" SHALOM));
+
+	// Each \N part is marked on its own, and only if it is right-to-left
+	EXPECT_EQ(RLE SHALOM "!" RLM_PDF "\\NHello!", util::add_rtl_marks(SHALOM "!\\NHello!"));
+	EXPECT_EQ("Hello\\N" RLE SHALOM RLM_PDF, util::add_rtl_marks("Hello\\N" SHALOM));
+
+	// Left unchanged: left-to-right, empty, several style runs, unterminated block
+	EXPECT_EQ("Hello!", util::add_rtl_marks("Hello!"));
+	EXPECT_EQ("", util::add_rtl_marks(""));
+	EXPECT_EQ(SHALOM " {\\i1}" OLAM, util::add_rtl_marks(SHALOM " {\\i1}" OLAM));
+	EXPECT_EQ("{\\i1" SHALOM, util::add_rtl_marks("{\\i1" SHALOM));
+
+	// Idempotent
+	auto once = util::add_rtl_marks(SHALOM "\\N" OLAM);
+	EXPECT_EQ(once, util::add_rtl_marks(once));
+}
+
+TEST(lagi_util, remove_rtl_marks) {
+	// Undoes add_rtl_marks
+	for (const char *text : {SHALOM "!", "{\\an8}- " SHALOM "\\NHello!\\N" OLAM "?", "Hello!", "",
+	                         SHALOM " {\\i1}" OLAM, "{\\i1" SHALOM}) {
+		EXPECT_EQ(text, util::remove_rtl_marks(util::add_rtl_marks(text)));
+	}
+
+	// and leaves marks it didn't add alone
+	EXPECT_EQ(RLE "123!" RLM_PDF, util::remove_rtl_marks(RLE "123!" RLM_PDF));
+	EXPECT_EQ(RLE SHALOM "\u202c", util::remove_rtl_marks(RLE SHALOM "\u202c"));
+	EXPECT_EQ("\u200f" SHALOM "!\u200f", util::remove_rtl_marks("\u200f" SHALOM "!\u200f"));
+}
+
 }

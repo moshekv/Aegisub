@@ -182,8 +182,12 @@ void AssParser::ParseMetadataLine(std::string const& rawdata) {
 }
 
 void AssParser::ParseEventLine(std::string const& data) {
-	if (data.starts_with("Dialogue:") || data.starts_with("Comment:"))
-		target->Events.push_back(*new AssDialogue(data));
+	if (data.starts_with("Dialogue:") || data.starts_with("Comment:")) {
+		auto diag = new AssDialogue(data);
+		// Added when saving
+		diag->Text = agi::util::remove_rtl_marks(diag->Text);
+		target->Events.push_back(*diag);
+	}
 }
 
 void AssParser::ParseStyleLine(std::string const& data) {
