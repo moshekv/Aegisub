@@ -147,4 +147,42 @@ TEST(lagi_util, remove_rtl_marks) {
 	EXPECT_EQ("\u200f" SHALOM "!\u200f", util::remove_rtl_marks("\u200f" SHALOM "!\u200f"));
 }
 
+#define YAFE "\u05d9\u05e4\u05d4"
+
+TEST(lagi_util, reorder_rtl_runs) {
+	// Karaoke syllables are stored last to first, timed with \kt, with the
+	// spaces between the embeddings
+	EXPECT_EQ("{\\q2}{\\kt70\\k30}" RLE YAFE "!" RLM_PDF " {\\kt30\\kf40}" RLE OLAM RLM_PDF " {\\kt0\\k30}" RLE SHALOM RLM_PDF,
+		util::reorder_rtl_runs("{\\k30}" SHALOM " {\\kf40}" OLAM " {\\k30}" YAFE "!"));
+
+	// Each run gets all the tags in effect for it
+	EXPECT_EQ("{\\q2}{\\r\\c&H00FFFF&\\c}" RLE YAFE "!" RLM_PDF " {\\r\\c&H00FFFF&}" RLE OLAM RLM_PDF " {\\r}" RLE SHALOM RLM_PDF,
+		util::reorder_rtl_runs(SHALOM " {\\c&H00FFFF&}" OLAM "{\\c} " YAFE "!"));
+
+	// Tags for the whole line stay in front, \t(\...) stays whole
+	EXPECT_EQ("{\\an8\\pos(1,2)\\q2}{\\r\\t(\\fs20)\\i1}" RLE OLAM RLM_PDF " {\\r\\t(\\fs20)}" RLE SHALOM RLM_PDF,
+		util::reorder_rtl_runs("{\\an8\\pos(1,2)\\t(\\fs20)}" SHALOM " {\\i1}" OLAM));
+
+	// \N parts with one run each are only embedded
+	EXPECT_EQ("{\\r\\i1}" RLE SHALOM RLM_PDF "\\N{\\r\\i1\\i0}" RLE OLAM "!" RLM_PDF,
+		util::reorder_rtl_runs("{\\i1}" SHALOM "{\\i0}\\N" OLAM "!"));
+
+	// Reordered lines are left alone by all three functions
+	auto reordered = util::reorder_rtl_runs("{\\k30}" SHALOM " {\\k40}" OLAM);
+	EXPECT_EQ(reordered, util::reorder_rtl_runs(reordered));
+	EXPECT_EQ(reordered, util::add_rtl_marks(reordered));
+	EXPECT_EQ(reordered, util::remove_rtl_marks(reordered));
+
+	// Spaces at the edges are kept
+	EXPECT_EQ("{\\q2} {\\kt40\\k40}" RLE OLAM RLM_PDF " {\\kt10\\k30}" RLE SHALOM RLM_PDF "{\\kt0\\k10} ",
+		util::reorder_rtl_runs("{\\k10} {\\k30}" SHALOM " {\\k40}" OLAM " "));
+
+	// Left unchanged: one run, left-to-right, drawings, \fsp, \fe-1 which
+	// libass handles, and soft line breaks
+	for (const char *text : {SHALOM "\\n{\\i1}" OLAM, SHALOM "!", "Hello {\\i1}world", "{\\p1}m 0 0 l 1 1{\\p0}" SHALOM,
+	                         "{\\fsp2}" SHALOM " {\\i1}" OLAM, "{\\fe-1}" SHALOM " {\\i1}" OLAM}) {
+		EXPECT_EQ(text, util::reorder_rtl_runs(text));
+	}
+}
+
 }

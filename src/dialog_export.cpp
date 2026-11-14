@@ -28,11 +28,13 @@
 // Aegisub Project http://www.aegisub.org/
 
 #include "ass_exporter.h"
+#include "async_video_provider.h"
 #include "ass_file.h"
 #include "compat.h"
 #include "include/aegisub/context.h"
 #include "help_button.h"
 #include "libresrc/libresrc.h"
+#include "project.h"
 #include "subtitle_format.h"
 #include "utils.h"
 
@@ -174,6 +176,7 @@ DialogExport::DialogExport(agi::Context *c)
 }
 
 DialogExport::~DialogExport() {
+	auto old_filters = c->ass->Properties.export_filters;
 	c->ass->Properties.export_filters.clear();
 	for (size_t i = 0; i < filter_list->GetCount(); ++i) {
 		if (filter_list->IsChecked(i)) {
@@ -181,6 +184,12 @@ DialogExport::~DialogExport() {
 				c->ass->Properties.export_filters += "|";
 			c->ass->Properties.export_filters += from_wx(filter_list->GetString(i));
 		}
+	}
+
+	// The video preview follows the right-to-left word order filter
+	if (c->ass->Properties.export_filters != old_filters) {
+		if (auto provider = c->project->VideoProvider())
+			provider->LoadSubtitles(c->ass.get());
 	}
 }
 

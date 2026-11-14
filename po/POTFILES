@@ -56,6 +56,7 @@ src/dialog_video_details.cpp
 src/dialog_video_properties.cpp
 src/export_fixstyle.cpp
 src/export_framerate.cpp
+src/export_rtl.cpp
 src/ffmpegsource_common.cpp
 src/font_file_lister.cpp
 src/font_file_lister_fontconfig.cpp

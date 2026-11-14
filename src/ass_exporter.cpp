@@ -41,6 +41,8 @@
 #include "project.h"
 #include "subtitle_format.h"
 
+#include <libaegisub/fs.h>
+
 #include <memory>
 #include <wx/sizer.h>
 #include <wx/statbox.h>
@@ -81,16 +83,18 @@ std::vector<std::string> AssExporter::GetAllFilterNames() const {
 }
 
 void AssExporter::Export(agi::fs::path const& filename, const char *charset, wxWindow *export_dialog) {
-	AssFile subs(*c->ass);
-
-	for (auto filter : filters) {
-		filter->LoadSettings(is_default, c);
-		filter->ProcessSubs(&subs, export_dialog);
-	}
-
 	const SubtitleFormat *writer = SubtitleFormat::GetWriter(filename);
 	if (!writer)
 		throw agi::InvalidInputException("Unknown file type.");
+
+	AssFile subs(*c->ass);
+	bool ass = agi::fs::HasExtension(filename, "ass") || agi::fs::HasExtension(filename, "ssa");
+
+	for (auto filter : filters) {
+		if (filter->AssOnly() && !ass) continue;
+		filter->LoadSettings(is_default, c);
+		filter->ProcessSubs(&subs, export_dialog);
+	}
 
 	writer->ExportFile(&subs, filename, c->project->Timecodes(), charset);
 }
