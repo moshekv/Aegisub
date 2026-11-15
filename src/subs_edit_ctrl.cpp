@@ -89,6 +89,22 @@ constexpr int SCI_GETBIDIRECTIONAL = 2708;
 constexpr int SCI_SETBIDIRECTIONAL = 2709;
 constexpr int SC_BIDIRECTIONAL_DISABLED = 0;
 constexpr int SC_BIDIRECTIONAL_L2R = 1;
+constexpr int SC_BIDIRECTIONAL_R2L = 2;
+
+/// Make Left and Right move across the screen in a right-to-left line, where
+/// the next character is to the left, as Scintilla moves in text order
+void SwapArrowKeys(wxStyledTextCtrl *ctrl, bool swap) {
+	struct { int modifiers, left, right; } const commands[] = {
+		{0, wxSTC_CMD_CHARLEFT, wxSTC_CMD_CHARRIGHT},
+		{wxSTC_KEYMOD_SHIFT, wxSTC_CMD_CHARLEFTEXTEND, wxSTC_CMD_CHARRIGHTEXTEND},
+		{wxSTC_KEYMOD_CTRL, wxSTC_CMD_WORDLEFT, wxSTC_CMD_WORDRIGHT},
+		{wxSTC_KEYMOD_CTRL | wxSTC_KEYMOD_SHIFT, wxSTC_CMD_WORDLEFTEXTEND, wxSTC_CMD_WORDRIGHTEXTEND},
+	};
+	for (auto const& c : commands) {
+		ctrl->CmdKeyAssign(wxSTC_KEY_LEFT, c.modifiers, swap ? c.right : c.left);
+		ctrl->CmdKeyAssign(wxSTC_KEY_RIGHT, c.modifiers, swap ? c.left : c.right);
+	}
+}
 }
 
 void SetBidiDirection(wxStyledTextCtrl *ctrl, std::string const& text) {
@@ -100,23 +116,32 @@ void SetBidiDirection(wxStyledTextCtrl *ctrl, std::string const& text) {
 	static bool unsupported = false;
 
 	// DirectWrite changes how all text is drawn, so only switch to it once
-	// there is right-to-left text to lay out, and then keep it
-	if (unsupported || !agi::util::is_rtl(text)
-		|| ctrl->SendMsg(SCI_GETBIDIRECTIONAL) != SC_BIDIRECTIONAL_DISABLED)
+	// there is right-to-left text to lay out, and then keep it. The base
+	// direction then follows the line's.
+	const bool rtl = agi::util::is_rtl(text);
+	const int current = ctrl->SendMsg(SCI_GETBIDIRECTIONAL);
+	if (unsupported || (current == SC_BIDIRECTIONAL_DISABLED && !rtl))
+		return;
+	const int wanted = rtl ? SC_BIDIRECTIONAL_R2L : SC_BIDIRECTIONAL_L2R;
+	if (current == wanted)
 		return;
 
-	// Scintilla only fully implements the mode with a left-to-right base
-	// direction, which still lays out right-to-left runs right-to-left
-	ctrl->SetTechnology(wxSTC_TECHNOLOGY_DIRECTWRITE);
-	ctrl->SendMsg(SCI_SETBIDIRECTIONAL, SC_BIDIRECTIONAL_L2R);
-	if (ctrl->SendMsg(SCI_GETBIDIRECTIONAL) != SC_BIDIRECTIONAL_L2R) {
+	if (current == SC_BIDIRECTIONAL_DISABLED)
+		ctrl->SetTechnology(wxSTC_TECHNOLOGY_DIRECTWRITE);
+	ctrl->SendMsg(SCI_SETBIDIRECTIONAL, wanted);
+	if (ctrl->SendMsg(SCI_GETBIDIRECTIONAL) != wanted) {
 		ctrl->SetTechnology(wxSTC_TECHNOLOGY_DEFAULT);
 		unsupported = true;
 		return;
 	}
 
-	// The selection's own text colour garbles selected right-to-left runs
-	ctrl->SetSelForeground(false, wxColour());
+	if (current == SC_BIDIRECTIONAL_DISABLED) {
+		// The selection's own text colour garbles selected right-to-left
+		// runs, and only a translucent selection is drawn where the text is
+		ctrl->SetSelForeground(false, wxColour());
+		ctrl->SetSelAlpha(128);
+	}
+	SwapArrowKeys(ctrl, rtl);
 }
 
 SubsTextEditCtrl::SubsTextEditCtrl(wxWindow* parent, wxSize wsize, long style, agi::Context *context)
