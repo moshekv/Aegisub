@@ -1,5 +1,5 @@
 [wrap-git]
 directory = wxWidgets
 url = https://github.com/moshekv/wxWidgets.git
-revision = 4cdee6f26682688d8d5a610cf962a175751bee6b
+revision = 26a67f02fad1ace6934dc877bb8d99964b9a3a9e
 clone-recursive = true
