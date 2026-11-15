@@ -100,12 +100,19 @@ VideoFrame AsyncVideoProvider::GetSubtitles(double time) {
 	// To do this, draw the subtitles once on a black frame and once on a white frame
 	// and solve for the color and alpha.
 	VideoFrame frame_black = GetBlankFrame(false);
-	if (!subs) return frame_black;
 	VideoFrame frame_white = GetBlankFrame(true);
 
-	subs_provider->LoadSubtitles(subs.get());
-	subs_provider->DrawSubtitles(frame_black, time / 1000.);
-	subs_provider->DrawSubtitles(frame_white, time / 1000.);
+	// The worker thread replaces subs and draws frames with the subtitles
+	// provider, so use both on it
+	bool has_subs = false;
+	worker->Sync([&]{
+		if (!subs) return;
+		has_subs = true;
+		subs_provider->LoadSubtitles(subs.get());
+		subs_provider->DrawSubtitles(frame_black, time / 1000.);
+		subs_provider->DrawSubtitles(frame_white, time / 1000.);
+	});
+	if (!has_subs) return frame_black;
 
 	using namespace boost::gil;
 	auto blackview = interleaved_view(frame_black.width, frame_black.height, (bgra8_pixel_t*) frame_black.data.data(), frame_black.width * 4);
